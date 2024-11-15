@@ -3,8 +3,7 @@ import os
 import librosa
 import numpy as np
 import torch
-
-from audio_zen.constant import EPSILON
+from FullSubNet_plus.speech_enhance.audio_zen.constant import EPSILON
 
 
 def build_ideal_ratio_mask(noisy_mag, clean_mag) -> torch.Tensor:

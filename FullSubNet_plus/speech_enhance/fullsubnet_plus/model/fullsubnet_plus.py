@@ -6,11 +6,34 @@ from FullSubNet_plus.speech_enhance.audio_zen.model.base_model import BaseModel
 from FullSubNet_plus.speech_enhance.audio_zen.model.module.sequence_model import SequenceModel
 from FullSubNet_plus.speech_enhance.audio_zen.model.module.attention_model import ChannelSELayer, ChannelECAlayer, ChannelCBAMLayer, \
     ChannelTimeSenseSELayer, ChannelTimeSenseAttentionSELayer, ChannelTimeSenseSEWeightLayer
-
+import pydantic
 # for log
 from FullSubNet_plus.speech_enhance.utils.logger import log
 
 print = log
+
+
+
+class FullSubNetPlusConfig(pydantic.BaseModel):
+    num_freqs = 257
+    look_ahead = 2
+    sequence_model = "LSTM"
+    sb_num_neighbors = 15
+    fb_num_neighbors = 0
+    fb_output_activate_function = "ReLU"
+    sb_output_activate_function = False
+    fb_model_hidden_size = 512
+    sb_model_hidden_size = 384
+    channel_attention_model = "TSSE"
+    norm_type = "offline_laplace_norm"
+#    num_groups_in_drop_band = 2
+    num_groups_in_drop_band = 1
+
+    output_size = 2
+    subband_num = 1
+    kersize = [3, 5, 10]
+    weight_init = False
+
 
 
 class FullSubNet_Plus(BaseModel):
