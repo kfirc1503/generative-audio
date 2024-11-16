@@ -1421,3 +1421,5 @@ collect_demo_data_config.py
 default*
 !ding/**/*.py
 events.*
+
+./FullSubNet_plus/.idea
