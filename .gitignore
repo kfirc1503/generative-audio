@@ -1423,5 +1423,5 @@ default*
 events.*
 
 FullSubNet_plus/.idea
-
+.idea/workspace.xml
 #./FullSubNet_plus/.idea
