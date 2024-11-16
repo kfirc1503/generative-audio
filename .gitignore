@@ -1422,4 +1422,6 @@ default*
 !ding/**/*.py
 events.*
 
-./FullSubNet_plus/.idea
+FullSubNet_plus/.idea
+
+#./FullSubNet_plus/.idea
