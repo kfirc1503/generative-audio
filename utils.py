@@ -97,6 +97,7 @@ def prepare_input_from_waveform(waveform: torch.Tensor) -> tuple:
         hop_length=256,  # 50% overlap
         win_length=512,
         window=torch.hann_window(512).to(waveform.device),
+        center = True,
         return_complex=True
     )
 
