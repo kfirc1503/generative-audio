@@ -1,10 +1,12 @@
 import torch
+from typing import Optional
 from torch.nn import functional
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.model.base_model import BaseModel
 from FullSubNet_plus.speech_enhance.audio_zen.model.module.sequence_model import SequenceModel
-from FullSubNet_plus.speech_enhance.audio_zen.model.module.attention_model import ChannelSELayer, ChannelECAlayer, ChannelCBAMLayer, \
+from FullSubNet_plus.speech_enhance.audio_zen.model.module.attention_model import ChannelSELayer, ChannelECAlayer, \
+    ChannelCBAMLayer, \
     ChannelTimeSenseSELayer, ChannelTimeSenseAttentionSELayer, ChannelTimeSenseSEWeightLayer
 import pydantic
 # for log
@@ -13,134 +15,226 @@ from FullSubNet_plus.speech_enhance.utils.logger import log
 print = log
 
 
-
 class FullSubNetPlusConfig(pydantic.BaseModel):
-    num_freqs = 257
-    look_ahead = 2
-    sequence_model = "LSTM"
-    sb_num_neighbors = 15
-    fb_num_neighbors = 0
-    fb_output_activate_function = "ReLU"
-    sb_output_activate_function = False
-    fb_model_hidden_size = 512
-    sb_model_hidden_size = 384
-    channel_attention_model = "TSSE"
-    norm_type = "offline_laplace_norm"
-#    num_groups_in_drop_band = 2
-    num_groups_in_drop_band = 1
-
-    output_size = 2
-    subband_num = 1
-    kersize = [3, 5, 10]
-    weight_init = False
-
+    num_freqs: int = 257
+    look_ahead: int = 2
+    sequence_model: str = "LSTM"
+    sb_num_neighbors: int = 15
+    fb_num_neighbors: int = 0
+    fb_output_activate_function: str = "ReLU"
+    sb_output_activate_function: bool = False
+    fb_model_hidden_size: int = 512
+    sb_model_hidden_size: int = 384
+    channel_attention_model: str = "TSSE"
+    norm_type: str = "offline_laplace_norm"
+    num_groups_in_drop_band: int = 1
+    output_size: int = 2
+    subband_num: int = 1
+    kersize: list[int] = [3, 5, 10]
+    weight_init: bool = False
 
 
 class FullSubNet_Plus(BaseModel):
-    def __init__(self,
-                 num_freqs,
-                 look_ahead,
-                 sequence_model,
-                 fb_num_neighbors,
-                 sb_num_neighbors,
-                 fb_output_activate_function,
-                 sb_output_activate_function,
-                 fb_model_hidden_size,
-                 sb_model_hidden_size,
-                 channel_attention_model="SE",
-                 norm_type="offline_laplace_norm",
-                 num_groups_in_drop_band=2,
-                 output_size=2,
-                 subband_num=1,
-                 kersize=[3, 5, 10],
-                 weight_init=True,
-                 ):
-        """
-        FullSubNet model (cIRM mask)
 
-        Args:
-            num_freqs: Frequency dim of the input
-            sb_num_neighbors: Number of the neighbor frequencies in each side
-            look_ahead: Number of use of the future frames
-            sequence_model: Chose one sequence model as the basic model (GRU, LSTM)
-        """
+    def __init__(self, config: Optional[FullSubNetPlusConfig] = None):
         super().__init__()
-        assert sequence_model in ("GRU", "LSTM", "TCN"), f"{self.__class__.__name__} only support GRU, LSTM and TCN."
+        if config is None:
+            # use the defulat config
+            config = FullSubNetPlusConfig()
 
-        if subband_num == 1:
-            self.num_channels = num_freqs
+        self.num_freqs = config.num_freqs
+        self.look_ahead = config.look_ahead
+        self.sequence_model = config.sequence_model
+        self.fb_num_neighbors = config.fb_num_neighbors
+        self.sb_num_neighbors = config.sb_num_neighbors
+        self.fb_output_activate_function = config.fb_output_activate_function
+        self.sb_output_activate_function = config.sb_output_activate_function
+        self.fb_model_hidden_size = config.fb_model_hidden_size
+        self.sb_model_hidden_size = config.sb_model_hidden_size
+        self.channel_attention_model = config.channel_attention_model
+        self.norm_type = config.norm_type
+        self.num_groups_in_drop_band = config.num_groups_in_drop_band
+        self.output_size = config.output_size
+        self.subband_num = config.subband_num
+        self.kersize = config.kersize
+
+        assert self.sequence_model in (
+        "GRU", "LSTM", "TCN"), f"{self.__class__.__name__} only support GRU, LSTM and TCN."
+
+        if self.subband_num == 1:
+            self.num_channels = self.num_freqs
         else:
-            self.num_channels = num_freqs // subband_num + 1
+            self.num_channels = self.num_freqs // self.subband_num + 1
 
-        if channel_attention_model:
-            if channel_attention_model == "SE":
+        if self.channel_attention_model:
+            if self.channel_attention_model == "SE":
                 self.channel_attention = ChannelSELayer(num_channels=self.num_channels)
                 self.channel_attention_real = ChannelSELayer(num_channels=self.num_channels)
                 self.channel_attention_imag = ChannelSELayer(num_channels=self.num_channels)
-            elif channel_attention_model == "ECA":
+            elif self.channel_attention_model == "ECA":
                 self.channel_attention = ChannelECAlayer(channel=self.num_channels)
                 self.channel_attention_real = ChannelECAlayer(channel=self.num_channels)
                 self.channel_attention_imag = ChannelECAlayer(channel=self.num_channels)
-            elif channel_attention_model == "CBAM":
+            elif self.channel_attention_model == "CBAM":
                 self.channel_attention = ChannelCBAMLayer(num_channels=self.num_channels)
                 self.channel_attention_real = ChannelCBAMLayer(num_channels=self.num_channels)
                 self.channel_attention_imag = ChannelCBAMLayer(num_channels=self.num_channels)
-            elif channel_attention_model == "TSSE":
-                self.channel_attention = ChannelTimeSenseSELayer(num_channels=self.num_channels, kersize=kersize)
-                self.channel_attention_real = ChannelTimeSenseSELayer(num_channels=self.num_channels, kersize=kersize)
-                self.channel_attention_imag = ChannelTimeSenseSELayer(num_channels=self.num_channels, kersize=kersize)
+            elif self.channel_attention_model == "TSSE":
+                self.channel_attention = ChannelTimeSenseSELayer(num_channels=self.num_channels, kersize=self.kersize)
+                self.channel_attention_real = ChannelTimeSenseSELayer(num_channels=self.num_channels,
+                                                                      kersize=self.kersize)
+                self.channel_attention_imag = ChannelTimeSenseSELayer(num_channels=self.num_channels,
+                                                                      kersize=self.kersize)
             else:
                 raise NotImplementedError(f"Not implemented channel attention model {self.channel_attention}")
 
         self.fb_model = SequenceModel(
-            input_size=num_freqs,
-            output_size=num_freqs,
-            hidden_size=fb_model_hidden_size,
+            input_size=self.num_freqs,
+            output_size=self.num_freqs,
+            hidden_size=self.fb_model_hidden_size,
             num_layers=2,
             bidirectional=False,
             sequence_model="TCN",
-            output_activate_function=fb_output_activate_function
+            output_activate_function=self.fb_output_activate_function
         )
 
         self.fb_model_real = SequenceModel(
-            input_size=num_freqs,
-            output_size=num_freqs,
-            hidden_size=fb_model_hidden_size,
+            input_size=self.num_freqs,
+            output_size=self.num_freqs,
+            hidden_size=self.fb_model_hidden_size,
             num_layers=2,
             bidirectional=False,
             sequence_model="TCN",
-            output_activate_function=fb_output_activate_function
+            output_activate_function=self.fb_output_activate_function
         )
 
         self.fb_model_imag = SequenceModel(
-            input_size=num_freqs,
-            output_size=num_freqs,
-            hidden_size=fb_model_hidden_size,
+            input_size=self.num_freqs,
+            output_size=self.num_freqs,
+            hidden_size=self.fb_model_hidden_size,
             num_layers=2,
             bidirectional=False,
             sequence_model="TCN",
-            output_activate_function=fb_output_activate_function
+            output_activate_function=self.fb_output_activate_function
         )
 
         self.sb_model = SequenceModel(
-            input_size=(sb_num_neighbors * 2 + 1) + 3 * (fb_num_neighbors * 2 + 1),
-            output_size=output_size,
-            hidden_size=sb_model_hidden_size,
+            input_size=(self.sb_num_neighbors * 2 + 1) + 3 * (self.fb_num_neighbors * 2 + 1),
+            output_size=self.output_size,
+            hidden_size=self.sb_model_hidden_size,
             num_layers=2,
             bidirectional=False,
-            sequence_model=sequence_model,
-            output_activate_function=sb_output_activate_function
+            sequence_model=self.sequence_model,
+            output_activate_function=self.sb_output_activate_function
         )
-        self.subband_num = subband_num
-        self.sb_num_neighbors = sb_num_neighbors
-        self.fb_num_neighbors = fb_num_neighbors
-        self.look_ahead = look_ahead
-        self.norm = self.norm_wrapper(norm_type)
-        self.num_groups_in_drop_band = num_groups_in_drop_band
-        self.output_size = output_size
 
-        if weight_init:
+        if config.weight_init:
             self.apply(self.weight_init)
+
+    # def __init__(self,
+    #              num_freqs,
+    #              look_ahead,
+    #              sequence_model,
+    #              fb_num_neighbors,
+    #              sb_num_neighbors,
+    #              fb_output_activate_function,
+    #              sb_output_activate_function,
+    #              fb_model_hidden_size,
+    #              sb_model_hidden_size,
+    #              channel_attention_model="SE",
+    #              norm_type="offline_laplace_norm",
+    #              num_groups_in_drop_band=2,
+    #              output_size=2,
+    #              subband_num=1,
+    #              kersize=[3, 5, 10],
+    #              weight_init=True,
+    #              ):
+    #     """
+    #     FullSubNet model (cIRM mask)
+    #
+    #     Args:
+    #         num_freqs: Frequency dim of the input
+    #         sb_num_neighbors: Number of the neighbor frequencies in each side
+    #         look_ahead: Number of use of the future frames
+    #         sequence_model: Chose one sequence model as the basic model (GRU, LSTM)
+    #     """
+    #     super().__init__()
+    #     assert sequence_model in ("GRU", "LSTM", "TCN"), f"{self.__class__.__name__} only support GRU, LSTM and TCN."
+    #
+    #     if subband_num == 1:
+    #         self.num_channels = num_freqs
+    #     else:
+    #         self.num_channels = num_freqs // subband_num + 1
+    #
+    #     if channel_attention_model:
+    #         if channel_attention_model == "SE":
+    #             self.channel_attention = ChannelSELayer(num_channels=self.num_channels)
+    #             self.channel_attention_real = ChannelSELayer(num_channels=self.num_channels)
+    #             self.channel_attention_imag = ChannelSELayer(num_channels=self.num_channels)
+    #         elif channel_attention_model == "ECA":
+    #             self.channel_attention = ChannelECAlayer(channel=self.num_channels)
+    #             self.channel_attention_real = ChannelECAlayer(channel=self.num_channels)
+    #             self.channel_attention_imag = ChannelECAlayer(channel=self.num_channels)
+    #         elif channel_attention_model == "CBAM":
+    #             self.channel_attention = ChannelCBAMLayer(num_channels=self.num_channels)
+    #             self.channel_attention_real = ChannelCBAMLayer(num_channels=self.num_channels)
+    #             self.channel_attention_imag = ChannelCBAMLayer(num_channels=self.num_channels)
+    #         elif channel_attention_model == "TSSE":
+    #             self.channel_attention = ChannelTimeSenseSELayer(num_channels=self.num_channels, kersize=kersize)
+    #             self.channel_attention_real = ChannelTimeSenseSELayer(num_channels=self.num_channels, kersize=kersize)
+    #             self.channel_attention_imag = ChannelTimeSenseSELayer(num_channels=self.num_channels, kersize=kersize)
+    #         else:
+    #             raise NotImplementedError(f"Not implemented channel attention model {self.channel_attention}")
+    #
+    #     self.fb_model = SequenceModel(
+    #         input_size=num_freqs,
+    #         output_size=num_freqs,
+    #         hidden_size=fb_model_hidden_size,
+    #         num_layers=2,
+    #         bidirectional=False,
+    #         sequence_model="TCN",
+    #         output_activate_function=fb_output_activate_function
+    #     )
+    #
+    #     self.fb_model_real = SequenceModel(
+    #         input_size=num_freqs,
+    #         output_size=num_freqs,
+    #         hidden_size=fb_model_hidden_size,
+    #         num_layers=2,
+    #         bidirectional=False,
+    #         sequence_model="TCN",
+    #         output_activate_function=fb_output_activate_function
+    #     )
+    #
+    #     self.fb_model_imag = SequenceModel(
+    #         input_size=num_freqs,
+    #         output_size=num_freqs,
+    #         hidden_size=fb_model_hidden_size,
+    #         num_layers=2,
+    #         bidirectional=False,
+    #         sequence_model="TCN",
+    #         output_activate_function=fb_output_activate_function
+    #     )
+    #
+    #     self.sb_model = SequenceModel(
+    #         input_size=(sb_num_neighbors * 2 + 1) + 3 * (fb_num_neighbors * 2 + 1),
+    #         output_size=output_size,
+    #         hidden_size=sb_model_hidden_size,
+    #         num_layers=2,
+    #         bidirectional=False,
+    #         sequence_model=sequence_model,
+    #         output_activate_function=sb_output_activate_function
+    #     )
+    #     self.subband_num = subband_num
+    #     self.sb_num_neighbors = sb_num_neighbors
+    #     self.fb_num_neighbors = fb_num_neighbors
+    #     self.look_ahead = look_ahead
+    #     self.norm = self.norm_wrapper(norm_type)
+    #     self.num_groups_in_drop_band = num_groups_in_drop_band
+    #     self.output_size = output_size
+    #
+    #     if weight_init:
+    #         self.apply(self.weight_init)
 
     def forward(self, noisy_mag, noisy_real, noisy_imag):
         """
