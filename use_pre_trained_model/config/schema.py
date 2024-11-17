@@ -17,7 +17,7 @@ class AudioConfig(BaseModel):
 class PreTrainedModelConfig(BaseModel):
     checkpoint_path: str
     device: str = "cuda"
-    model_config: FullSubNetPlusConfig
+    model: FullSubNetPlusConfig
 
 class ModelConfig(BaseModel):
     """Model configuration"""
@@ -42,4 +42,4 @@ class ModelConfig(BaseModel):
 class Config(BaseModel):
     """Main configuration"""
     audio: AudioConfig = AudioConfig()
-    model: ModelConfig
+    pre_trained_model: PreTrainedModelConfig

@@ -1,6 +1,7 @@
 import torch
-from typing import Optional
+from typing import Optional,List
 from torch.nn import functional
+from omegaconf import ListConfig
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.model.base_model import BaseModel
@@ -30,12 +31,19 @@ class FullSubNetPlusConfig(pydantic.BaseModel):
     num_groups_in_drop_band: int = 1
     output_size: int = 2
     subband_num: int = 1
-    kersize: list[int] = [3, 5, 10]
+    kersize: List[int] = pydantic.Field(default_factory=lambda: [3, 5, 10])
     weight_init: bool = False
+
+    @pydantic.validator("kersize", pre=True)
+    def validate_kersize(cls, v):
+        if isinstance(v, ListConfig):
+            return list(v)  # Convert ListConfig to a native Python list
+        if not isinstance(v, list):
+            raise ValueError(f"kersize must be a list of integers, got {type(v).__name__}")
+        return v
 
 
 class FullSubNet_Plus(BaseModel):
-
     def __init__(self, config: Optional[FullSubNetPlusConfig] = None):
         super().__init__()
         if config is None:
@@ -53,13 +61,14 @@ class FullSubNet_Plus(BaseModel):
         self.sb_model_hidden_size = config.sb_model_hidden_size
         self.channel_attention_model = config.channel_attention_model
         self.norm_type = config.norm_type
+        self.norm = self.norm_wrapper(self.norm_type)
         self.num_groups_in_drop_band = config.num_groups_in_drop_band
         self.output_size = config.output_size
         self.subband_num = config.subband_num
         self.kersize = config.kersize
 
         assert self.sequence_model in (
-        "GRU", "LSTM", "TCN"), f"{self.__class__.__name__} only support GRU, LSTM and TCN."
+            "GRU", "LSTM", "TCN"), f"{self.__class__.__name__} only support GRU, LSTM and TCN."
 
         if self.subband_num == 1:
             self.num_channels = self.num_freqs

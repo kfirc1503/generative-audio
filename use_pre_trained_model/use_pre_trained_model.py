@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from config.schema import Config
 from dataset import AudioDataset
-from utils import prepare_input, model_outputs_to_waveforms
+from utils import prepare_input, model_outputs_to_waveforms, load_pretrained_model, prepare_input_from_waveform
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus
 
 
@@ -19,21 +19,29 @@ def main(cfg: DictConfig):
     config = Config(**cfg)
 
     # Initialize model
-    model = FullSubNet_Plus(**config.model.dict(exclude={'checkpoint_path', 'device'}))
-    checkpoint = torch.load(config.model.checkpoint_path, map_location="cpu")
-    model.load_state_dict(checkpoint["model"])
-    device = torch.device(config.model.device)
+    # model = FullSubNet_Plus(config.pre_trained_model.model)
+    # # load pre trained model
+    # model = FullSubNet_Plus(**config.model.dict(exclude={'checkpoint_path', 'device'}))
+    model_path:str = config.pre_trained_model.checkpoint_path
+    sub_net_plus_config = config.pre_trained_model.model
+    model = load_pretrained_model(model_path, sub_net_plus_config)
+
+    # checkpoint = torch.load(config.model.checkpoint_path, map_location="cpu")
+    # model.load_state_dict(checkpoint["model"])
+    device = torch.device(config.pre_trained_model.device)
     model.to(device)
     model.eval()
 
     # Setup data paths
-    data_dir = Path("data")
+    data_path = "C:/Kfir/repos/generative-audio/FullSubNet_plus/data"
+    data_dir = Path(data_path)
     noisy_dir = data_dir / "noisy"
-    enhanced_dir = data_dir / "enhanced"
+    clean_dir = data_dir / "clean"
+    enhanced_dir = data_dir / "enhanced2"
     enhanced_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize dataset and dataloader
-    dataset = AudioDataset(noisy_path=noisy_dir, sample_rate=config.audio.sr)
+    dataset = AudioDataset(noisy_path=noisy_dir,clean_path=clean_dir, sample_rate=config.audio.sr)
     dataloader = DataLoader(
         dataset,
         batch_size=config.audio.batch_size,
@@ -43,17 +51,13 @@ def main(cfg: DictConfig):
 
     # Process audio files
     with torch.no_grad():
-        for batch_idx, noisy_wavs in enumerate(dataloader):
-            noisy_wavs = noisy_wavs.to(device)
-
+        for batch_idx, batch in enumerate(dataloader):
+            clean_waveforms, noisy_waveforms = batch
+            clean_waveforms = clean_waveforms.to(device)
+            noisy_waveforms = noisy_waveforms.to(device)
             # Prepare input
-            noisy_mag, noisy_real, noisy_imag = prepare_input(
-                noisy_wavs,
-                config.audio.n_fft,
-                config.audio.hop_length,
-                config.audio.win_length
-            )
-
+            noisy_mag, noisy_real, noisy_imag = prepare_input_from_waveform(noisy_waveforms)
+            model = model.to(device)
             # Forward pass
             enhanced_masks = model(noisy_mag, noisy_real, noisy_imag)
 
@@ -62,9 +66,7 @@ def main(cfg: DictConfig):
                 enhanced_masks,
                 noisy_real,
                 noisy_imag,
-                config.audio.n_fft,
-                config.audio.hop_length,
-                config.audio.win_length
+                orig_length= 48000
             )
 
             # Save enhanced audio
