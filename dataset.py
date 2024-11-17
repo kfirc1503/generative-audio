@@ -3,51 +3,60 @@ from pathlib import Path
 from typing import Union, Tuple
 import torch
 import torchaudio
+import pydantic
 from torch.utils.data import Dataset
 
 
+
+
+class AudioDataSetConfig(pydantic.BaseModel):
+    clean_path: Union[str, Path]
+    noisy_path: Union[str, Path]
+    sample_rate: int = 16000
+    snr_range: Tuple[int, int] = pydantic.Field(default_factory=lambda: (-5,15))
+    silence_length: float = 0.2,
+    sub_sample_length_seconds: float = 3.0
+    target_dB_FS: float = -25.0
+    target_dB_FS_floating_value: float = 0.0
+    sub_sample_length: int = None
+    silence_sample_length: int = None
+
+
+    @pydantic.root_validator(pre = True)
+    def compute_sub_sample_length(cls, values):
+        # Use default values if they are not explicitly provided
+        sample_rate = values.get('sample_rate', 16000)
+        sub_sample_length_seconds = values.get('sub_sample_length_seconds', 3.0)
+        silence_length = values.get('silence_length', 0.2)
+
+        # Compute lengths
+        values['sub_sample_length'] = int(sub_sample_length_seconds * sample_rate)
+        values['silence_sample_length'] = int(silence_length * sample_rate)
+        return values
+
+
 class AudioDataset(Dataset):
-    def __init__(
-            self,
-            clean_path: Union[str, Path],
-            noisy_path: Union[str, Path],
-            sample_rate: int = 16000,
-            snr_range: Tuple[int, int] = (-5, 15),
-            silence_length: float = 0.2,
-            sub_sample_length: float = 3.0,
-            target_dB_FS: float = -25.0,
-            target_dB_FS_floating_value: float = 0.0,
-    ):
+    def __init__(self, config: AudioDataSetConfig):
+
         """
         Dataset for speech enhancement training that dynamically mixes clean and noisy audio.
 
         Args:
-            clean_path (Union[str, Path]): Path to directory containing clean audio files.
-            noisy_path (Union[str, Path]): Path to directory containing noise audio files.
-            sample_rate (int): Target sample rate for all audio.
-            snr_range (Tuple[int, int]): Range of Signal-to-Noise ratios for mixing.
-            silence_length (float): Length of silence between noise segments in seconds.
-            sub_sample_length (float): Length of audio samples in seconds.
-            target_dB_FS (float): Central target RMS level in dBFS for normalization.
-            target_dB_FS_floating_value (float): Range for random variation of target dBFS.
+            config (AudioDataSetConfig): Configuration object containing all dataset parameters
         """
-        self.clean_path = Path(clean_path)
-        self.noisy_path = Path(noisy_path)
-        self.sample_rate = sample_rate
-        self.snr_range = snr_range
-        self.silence_length = int(silence_length * sample_rate)
-        self.sub_sample_length = int(sub_sample_length * sample_rate)
-        self.target_dB_FS = target_dB_FS
-        self.target_dB_FS_floating_value = target_dB_FS_floating_value
-
+        self.config = config
+        # turn them into Path if needed
+        self.clean_path = Path(config.clean_path)
+        self.noisy_path = Path(config.noisy_path)
         # Get all audio files
         self.clean_files = list(self.clean_path.rglob("*.wav"))
         self.noise_files = list(self.noisy_path.rglob("*.wav"))
 
         if not self.clean_files:
-            raise ValueError(f"No WAV files found in clean directory: {clean_path}")
+            raise ValueError(f"No WAV files found in clean directory: {self.clean_path}")
         if not self.noise_files:
-            raise ValueError(f"No WAV files found in noise directory: {noisy_path}")
+            raise ValueError(f"No WAV files found in noise directory: {self.noisy_path}")
+
 
     def __len__(self) -> int:
         return len(self.clean_files)
@@ -70,7 +79,7 @@ class AudioDataset(Dataset):
             waveform = torch.mean(waveform, dim=0, keepdim=True)
 
         # Resample if necessary
-        if sr != self.sample_rate:
+        if sr != self.config.sample_rate:
             resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=self.sample_rate)
             waveform = resampler(waveform)
 
@@ -78,15 +87,15 @@ class AudioDataset(Dataset):
 
     def _normalize_audio(self, waveform: torch.Tensor) -> torch.Tensor:
         """Normalize audio to a target RMS level in dBFS, with optional variability."""
-        if self.target_dB_FS_floating_value > 0.0:
+        if self.config.target_dB_FS_floating_value > 0.0:
             # Randomly select a normalization level within the specified range
             variable_dB_FS = random.uniform(
-                self.target_dB_FS - self.target_dB_FS_floating_value,
-                self.target_dB_FS + self.target_dB_FS_floating_value
+                self.config.target_dB_FS - self.config.target_dB_FS_floating_value,
+                self.config.target_dB_FS + self.config.target_dB_FS_floating_value
             )
         else:
             # Use the fixed target level
-            variable_dB_FS = self.target_dB_FS
+            variable_dB_FS = self.config.target_dB_FS
 
         rms = waveform.pow(2).mean().sqrt()
         rms_db = 20 * torch.log10(rms + 1e-8)
@@ -109,7 +118,7 @@ class AudioDataset(Dataset):
             noise_segment = self._normalize_audio(noise_segment)
 
             # Add silence padding
-            silence = torch.zeros(1, self.silence_length)
+            silence = torch.zeros(1, self.config.silence_sample_length)
             noise_segment = torch.cat([noise_segment, silence], dim=1)
 
             noise = torch.cat([noise, noise_segment], dim=1)
@@ -156,19 +165,19 @@ class AudioDataset(Dataset):
             clean = self._load_and_process_audio(clean_file)
 
         # Ensure correct length
-        if clean.shape[1] > self.sub_sample_length:
-            start = random.randint(0, clean.shape[1] - self.sub_sample_length)
-            clean = clean[:, start:start + self.sub_sample_length]
+        if clean.shape[1] > self.config.sub_sample_length:
+            start = random.randint(0, clean.shape[1] - self.config.sub_sample_length)
+            clean = clean[:, start:start + self.config.sub_sample_length]
         else:
             # Pad if too short
-            padding = self.sub_sample_length - clean.shape[1]
+            padding = self.config.sub_sample_length - clean.shape[1]
             clean = torch.nn.functional.pad(clean, (0, padding))
 
         # Generate noise of matching length
-        noise = self._get_noise_segment(length=self.sub_sample_length)
+        noise = self._get_noise_segment(length=self.config.sub_sample_length)
 
         # Randomly select an SNR value
-        snr = random.uniform(self.snr_range[0], self.snr_range[1])
+        snr = random.uniform(self.config.snr_range[0], self.config.snr_range[1])
         # Mix clean and noise with the selected SNR
         noisy, clean = self._mix_with_snr(clean, noise, snr)
 

@@ -8,6 +8,17 @@ audio:
   batch_size: 8
   num_workers: 4
 
+
+
+pre_trained_data_model:
+  data_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
+  enhanced_dir_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/enhanced2"
+  dataset:
+    clean_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
+    noisy_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/noisy"
+
+
+
 pre_trained_model:
   checkpoint_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/best_model.tar"
   #checkpoint_path: "../../../FullSubNet_plus/best_model.tar"
