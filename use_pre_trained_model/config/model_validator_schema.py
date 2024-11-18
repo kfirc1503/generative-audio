@@ -4,6 +4,8 @@ from typing import List
 from pydantic import BaseModel, Field
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig
 from dataset import AudioDataSetConfig
+from use_pre_trained_model.model_validator import ModelValidatorConfig,ModelValidator
+
 
 class AudioConfig(BaseModel):
     """Audio processing configuration"""
@@ -14,20 +16,13 @@ class AudioConfig(BaseModel):
     batch_size: int = 8
     num_workers: int = 4
 
-
-class PreTrainedModelDataConfig(BaseModel):
+class DataConfig(BaseModel):
     dataset: AudioDataSetConfig
     data_path: str
-    enhanced_dir_path: str
-
-class PreTrainedModelConfig(BaseModel):
-    checkpoint_path: str
-    device: str = "cuda"
-    model: FullSubNetPlusConfig
 
 
 class Config(BaseModel):
     """Main configuration"""
     audio: AudioConfig = AudioConfig()
-    pre_trained_data_model: PreTrainedModelDataConfig
-    pre_trained_model: PreTrainedModelConfig
+    data_config: DataConfig
+    model_validator: ModelValidatorConfig

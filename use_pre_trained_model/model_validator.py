@@ -7,28 +7,30 @@ from pesq import pesq
 from pystoi import stoi
 import json
 from dataset import AudioDataset, AudioDataSetConfig
-from typing import Dict, List
+from typing import Dict, List, Literal
+import pydantic
+from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig, FullSubNet_Plus
+import utils
+
+
+
+
+class ModelValidatorConfig(pydantic.BaseModel):
+    model_path: str
+    model_config: FullSubNetPlusConfig
+    device: Literal['cpu', 'cuda'] = 'cuda'
 
 
 class ModelValidator:
-    def __init__(self, model_path: str, config_path: str, device: str = "cuda"):
-        self.device = device
-        # Load model and config
-        self.model, self.config = self.load_model_and_config(model_path, config_path)
-        self.model.to(device)
+    def __init__(self, config: ModelValidatorConfig):
+        self.config = config
+        self.model = utils.load_pretrained_model(config.model_path, config.model_config)
+        self.device = config.device
+        if config.device == 'cuda':
+            # check if gpu is exist
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
         self.model.eval()
-
-    def load_model_and_config(self, model_path: str, config_path: str):
-        # Load the pre-trained model
-        checkpoint = torch.load(model_path, map_location=self.device)
-        model_config = checkpoint['model_config']
-
-        # Import the model class dynamically
-        from fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus
-        model = FullSubNet_Plus(**model_config)
-        model.load_state_dict(checkpoint['model_state_dict'])
-
-        return model, model_config
 
     def calculate_metrics(self, clean: np.ndarray, enhanced: np.ndarray, sr: int = 16000) -> Dict[str, float]:
         """Calculate PESQ and STOI metrics"""
@@ -103,19 +105,27 @@ class ModelValidator:
 
             return enhanced.cpu().numpy().squeeze()
 
-    def validate_dataset(self, dataset: AudioDataset, num_samples: int = 100) -> Dict[str, float]:
-        """Validate model on dataset and return average metrics"""
+    def validate_dataloader(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, float]:
+        """Validate model using a dataloader and return average metrics"""
         all_metrics = []
 
-        for i in tqdm(range(num_samples)):
-            noisy, clean = dataset[i % len(dataset)]
+        # Process batches
+        for batch in tqdm(dataloader, desc="Validating"):
+            noisy, clean = batch
+            batch_size = noisy.size(0)
 
-            # Enhance audio
-            enhanced = self.enhance_audio(noisy)
+            # Process each item in batch
+            for i in range(batch_size):
+                # Enhance audio
+                enhanced = self.enhance_audio(noisy[i])
 
-            # Calculate metrics
-            metrics = self.calculate_metrics(clean.numpy(), enhanced)
-            all_metrics.append(metrics)
+                # Calculate metrics
+                metrics = self.calculate_metrics(
+                    clean[i].numpy(),
+                    enhanced,
+                    sr=16000  # You might want to make this configurable
+                )
+                all_metrics.append(metrics)
 
         # Calculate average metrics
         avg_metrics = {
@@ -123,39 +133,48 @@ class ModelValidator:
             for metric in all_metrics[0].keys()
         }
 
+        # Print results
+        print("\nValidation Results:")
+        for metric, value in avg_metrics.items():
+            print(f"{metric}: {value:.4f}")
+
         return avg_metrics
 
+    def save_metrics(self, metrics: Dict[str, float], save_path: str):
+        """Save metrics to a JSON file"""
+        with open(save_path, 'w') as f:
+            json.dump(metrics, f, indent=4)
 
-def main():
-    # Setup paths and configuration
-    model_path = "path/to/pretrained/model.pth"
-    config_path = "path/to/inference.toml"
-
-    # Setup dataset
-    dataset_config = AudioDataSetConfig(
-        clean_path="path/to/clean/wavs",
-        noisy_path="path/to/noisy/wavs",
-        sample_rate=16000,
-        sub_sample_length_seconds=3.0
-    )
-
-    dataset = AudioDataset(dataset_config)
-
-    # Initialize validator
-    validator = ModelValidator(model_path, config_path)
-
-    # Run validation
-    metrics = validator.validate_dataset(dataset, num_samples=100)
-
-    # Print and save results
-    print("\nValidation Results:")
-    for metric, value in metrics.items():
-        print(f"{metric}: {value:.4f}")
-
-    # Save metrics to file
-    with open("validation_results.json", "w") as f:
-        json.dump(metrics, f, indent=4)
-
-
-if __name__ == "__main__":
-    main()
+#
+# def main():
+#     # Setup configuration
+#     config = ModelValidatorConfig(
+#         model_path="path/to/model.pth",
+#         model_config=FullSubNetPlusConfig(...),
+#         device="cuda"
+#     )
+#
+#     # Create dataset
+#     dataset = AudioDataset(AudioDataSetConfig(...))
+#
+#     # Create dataloader
+#     dataloader = torch.utils.data.DataLoader(
+#         dataset,
+#         batch_size=4,  # Adjust based on your GPU memory
+#         shuffle=False,
+#         num_workers=4,
+#         pin_memory=True
+#     )
+#
+#     # Initialize validator
+#     validator = ModelValidator(config)
+#
+#     # Run validation
+#     metrics = validator.validate_dataloader(dataloader)
+#
+#     # Save results
+#     validator.save_metrics(metrics, "validation_results.json")
+#
+#
+# if __name__ == "__main__":
+#     main()

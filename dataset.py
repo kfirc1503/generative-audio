@@ -13,7 +13,7 @@ class AudioDataSetConfig(pydantic.BaseModel):
     clean_path: Union[str, Path]
     noisy_path: Union[str, Path]
     sample_rate: int = 16000
-    snr_range: Tuple[int, int] = pydantic.Field(default_factory=lambda: (-5,15))
+    snr_range: Tuple[int, int] = pydantic.Field(default_factory=lambda: (-5,20))
     silence_length: float = 0.2,
     sub_sample_length_seconds: float = 3.0
     target_dB_FS: float = -25.0
