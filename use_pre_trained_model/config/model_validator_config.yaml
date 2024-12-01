@@ -5,7 +5,7 @@ audio:
   win_length: 512
   hop_length: 256
   sr: 16000
-  batch_size: 8
+  batch_size: 1
   num_workers: 4
 
 data_config:
@@ -32,6 +32,6 @@ model_validator:
     sb_model_hidden_size: 384
     weight_init: false
     norm_type: "offline_laplace_norm"
-    num_groups_in_drop_band: 1
+    num_groups_in_drop_band: 2
     kersize: [3, 5, 10]
     subband_num: 1

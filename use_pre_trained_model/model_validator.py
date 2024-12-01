@@ -12,6 +12,7 @@ import pydantic
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig, FullSubNet_Plus
 import utils
 
+from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 
 
 
@@ -88,6 +89,8 @@ class ModelValidator:
 
             pred_crm = self.model(noisy_mag, noisy_real, noisy_imag)
             pred_crm = pred_crm.permute(0, 2, 3, 1)
+            # dont know if necessary yet
+            pred_crm = decompress_cIRM(pred_crm)
 
             # Apply mask and reconstruct
             enhanced_real = pred_crm[..., 0] * noisy_complex.real - pred_crm[..., 1] * noisy_complex.imag
