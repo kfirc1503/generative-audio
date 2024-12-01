@@ -1426,4 +1426,5 @@ FullSubNet_plus/.idea
 .idea/workspace.xml
 .idea/
 FullSubNet_plus/data
+use_pre_trained_model/outputs
 #./FullSubNet_plus/.idea
