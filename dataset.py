@@ -7,32 +7,35 @@ import pydantic
 from torch.utils.data import Dataset
 
 
-
-
 class AudioDataSetConfig(pydantic.BaseModel):
     clean_path: Union[str, Path]
     noisy_path: Union[str, Path]
     sample_rate: int = 16000
-    snr_range: Tuple[int, int] = pydantic.Field(default_factory=lambda: (-5,20))
-    silence_length: float = 0.2,
+    snr_range: Tuple[int, int] = pydantic.Field(default_factory=lambda: (-5, 20))
+    silence_length: float = 0.2
     sub_sample_length_seconds: float = 3.0
     target_dB_FS: float = -25.0
     target_dB_FS_floating_value: float = 0.0
     sub_sample_length: int = None
     silence_sample_length: int = None
 
+    def model_post_init(self, __context=None):
+        # Compute these values after initialization
+        self.sub_sample_length = int(self.sub_sample_length_seconds * self.sample_rate)
+        self.silence_sample_length = int(self.silence_length * self.sample_rate)
 
-    @pydantic.root_validator(pre = True)
-    def compute_sub_sample_length(cls, values):
-        # Use default values if they are not explicitly provided
-        sample_rate = values.get('sample_rate', 16000)
-        sub_sample_length_seconds = values.get('sub_sample_length_seconds', 3.0)
-        silence_length = values.get('silence_length', 0.2)
 
-        # Compute lengths
-        values['sub_sample_length'] = int(sub_sample_length_seconds * sample_rate)
-        values['silence_sample_length'] = int(silence_length * sample_rate)
-        return values
+    # @pydantic.model_validator(mode='before')
+    # def compute_sub_sample_lengths(cls, values):
+    #     # Use default values if not explicitly provided
+    #     sample_rate = values.get('sample_rate', 16000)
+    #     sub_sample_length_seconds = values.get('sub_sample_length_seconds', 3.0)
+    #     silence_length = values.get('silence_length', 0.2)
+    #
+    #     # Compute lengths
+    #     values['sub_sample_length'] = int(sub_sample_length_seconds * sample_rate)
+    #     values['silence_sample_length'] = int(silence_length * sample_rate)
+    #     return values
 
 
 class AudioDataset(Dataset):
@@ -46,8 +49,8 @@ class AudioDataset(Dataset):
         """
         self.config = config
         # turn them into Path if needed
-        self.clean_path = Path(config.clean_path)
-        self.noisy_path = Path(config.noisy_path)
+        self.clean_path = Path(config.clean_path).resolve()
+        self.noisy_path = Path(config.noisy_path).resolve()
         # Get all audio files
         self.clean_files = list(self.clean_path.rglob("*.wav"))
         self.noise_files = list(self.noisy_path.rglob("*.wav"))
@@ -56,7 +59,6 @@ class AudioDataset(Dataset):
             raise ValueError(f"No WAV files found in clean directory: {self.clean_path}")
         if not self.noise_files:
             raise ValueError(f"No WAV files found in noise directory: {self.noisy_path}")
-
 
     def __len__(self) -> int:
         return len(self.clean_files)

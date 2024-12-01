@@ -11,15 +11,18 @@ audio:
 data_config:
   data_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
   dataset:
-    clean_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
-    noisy_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/noisy"
+    clean_path: "../FullSubNet_plus/data/clean"
+    #clean_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
+    #noisy_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/noisy"
+    noisy_path: "../FullSubNet_plus/data/noisy"
     sub_sample_length_seconds: 5
 
 
 model_validator:
-  model_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/best_model.tar"
+  model_path: "../FullSubNet_plus/best_model.tar"
+  #model_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/best_model.tar"
   device: "cpu"
-  model_config:
+  model_configuration:
     sb_num_neighbors: 15
     fb_num_neighbors: 0
     num_freqs: 257

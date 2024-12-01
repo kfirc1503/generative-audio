@@ -18,14 +18,14 @@ from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_c
 
 class ModelValidatorConfig(pydantic.BaseModel):
     model_path: str
-    model_config: FullSubNetPlusConfig
+    model_configuration: FullSubNetPlusConfig
     device: Literal['cpu', 'cuda'] = 'cuda'
 
 
 class ModelValidator:
     def __init__(self, config: ModelValidatorConfig):
         self.config = config
-        self.model = utils.load_pretrained_model(config.model_path, config.model_config)
+        self.model = utils.load_pretrained_model(config.model_path, config.model_configuration)
         self.device = config.device
         if config.device == 'cuda':
             # check if gpu is exist
