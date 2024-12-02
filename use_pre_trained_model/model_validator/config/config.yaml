@@ -12,8 +12,6 @@ data_config:
   data_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
   dataset:
     clean_path: "../FullSubNet_plus/data/clean"
-    #clean_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
-    #noisy_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/noisy"
     noisy_path: "../FullSubNet_plus/data/noisy"
     sub_sample_length_seconds: 8
     target_dB_FS_floating_value: 10
@@ -21,7 +19,6 @@ data_config:
 
 model_validator:
   model_path: "../FullSubNet_plus/best_model.tar"
-  #model_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/best_model.tar"
   device: "cpu"
   model_configuration:
     sb_num_neighbors: 15
