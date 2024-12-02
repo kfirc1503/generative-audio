@@ -119,7 +119,6 @@ class Model(BaseModel):
 
 
 if __name__ == "__main__":
-    import datetime
 
     with torch.no_grad():
         model = Model(

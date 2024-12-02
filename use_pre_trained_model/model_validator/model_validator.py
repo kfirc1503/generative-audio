@@ -1,20 +1,17 @@
 import torch
-import torchaudio
 import numpy as np
-from pathlib import Path
 from tqdm import tqdm
 from pesq import pesq
 from pystoi import stoi
 import json
-from dataset import AudioDataset, AudioDataSetConfig
-from typing import Dict, List, Literal
+from typing import Dict, Literal
 import pydantic
-from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig, FullSubNet_Plus
+from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig
 import utils
 
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
-from FullSubNet_plus.speech_enhance.audio_zen.metrics import SI_SDR,STOI,NB_PESQ,WB_PESQ
 import scipy.signal as signal
+
 
 class ModelValidatorConfig(pydantic.BaseModel):
     model_path: str
@@ -78,42 +75,6 @@ class ModelValidator:
             }
 
         return metrics
-
-
-    def calculate_metrics_like_article(self, clean: np.ndarray, enhanced: np.ndarray, sr: int = 16000) -> Dict[str, float]:
-        # Ensure correct shape and type
-        clean = clean.squeeze()
-        enhanced = enhanced.squeeze()
-        try:
-            wb_pesq = WB_PESQ(clean, enhanced)
-            nb_pesq = NB_PESQ(clean, enhanced)
-            stoi_score  = STOI(clean, enhanced)
-            si_sdr = SI_SDR(clean, enhanced)
-
-            metrics = {
-                'WB_PESQ': float(wb_pesq),
-                'NB_PESQ': float(nb_pesq),
-                'STOI': float(stoi_score),
-                'SI_SDR': float(si_sdr)
-            }
-
-        except Exception as e:
-            print(f"Error calculating metrics: {e}")
-            metrics = {
-                'WB_PESQ': -1,
-                'NB_PESQ': -1,
-                'STOI': -1,
-                'SI_SDR': -1
-            }
-        return metrics
-
-
-
-
-
-
-
-
 
     def enhance_audio(self, noisy: torch.Tensor) -> np.ndarray:
         """Enhance a single audio sample"""
@@ -189,79 +150,7 @@ class ModelValidator:
 
         return avg_metrics
 
-
-    def validate_dataloader_like_article(self, dataloader: torch.utils.data.DataLoader) -> Dict[str, float]:
-        """Validate model using a dataloader and return average metrics"""
-        all_metrics = []
-
-        # Process batches
-        for batch in tqdm(dataloader, desc="Validating"):
-            noisy, clean = batch
-            batch_size = noisy.size(0)
-
-            # Process each item in batch
-            for i in range(batch_size):
-                # Enhance audio
-                enhanced = self.enhance_audio(noisy[i])
-
-                # Calculate metrics
-                metrics = self.calculate_metrics_like_article(
-                    clean[i].numpy(),
-                    enhanced,
-                    sr=16000  # You might want to make this configurable
-                )
-                all_metrics.append(metrics)
-
-        # Calculate average metrics
-        avg_metrics = {
-            metric: np.mean([m[metric] for m in all_metrics])
-            for metric in all_metrics[0].keys()
-        }
-
-        # Print results
-        print("\nValidation Results:")
-        for metric, value in avg_metrics.items():
-            print(f"{metric}: {value:.4f}")
-
-        return avg_metrics
-
-
-
     def save_metrics(self, metrics: Dict[str, float], save_path: str):
         """Save metrics to a JSON file"""
         with open(save_path, 'w') as f:
             json.dump(metrics, f, indent=4)
-
-#
-# def main():
-#     # Setup configuration
-#     config = ModelValidatorConfig(
-#         model_path="path/to/model.pth",
-#         model_config=FullSubNetPlusConfig(...),
-#         device="cuda"
-#     )
-#
-#     # Create dataset
-#     dataset = AudioDataset(AudioDataSetConfig(...))
-#
-#     # Create dataloader
-#     dataloader = torch.utils.data.DataLoader(
-#         dataset,
-#         batch_size=4,  # Adjust based on your GPU memory
-#         shuffle=False,
-#         num_workers=4,
-#         pin_memory=True
-#     )
-#
-#     # Initialize validator
-#     validator = ModelValidator(config)
-#
-#     # Run validation
-#     metrics = validator.validate_dataloader(dataloader)
-#
-#     # Save results
-#     validator.save_metrics(metrics, "validation_results.json")
-#
-#
-# if __name__ == "__main__":
-#     main()

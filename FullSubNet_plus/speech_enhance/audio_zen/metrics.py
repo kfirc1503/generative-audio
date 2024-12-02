@@ -1,8 +1,6 @@
 import numpy as np
-import scipy.signal
 from mir_eval.separation import bss_eval_sources
 from pesq import pesq
-from pypesq import pesq as nb_pesq
 from pystoi.stoi import stoi
 import librosa
 import scipy.signal as signal

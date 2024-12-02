@@ -198,7 +198,7 @@ class BaseTrainer:
         if is_best_epoch:
             print(self.color_tool.red(f"\t Found a best score in the {epoch} epoch, saving..."))
             log(f"\t Found a best score in the {epoch} epoch, saving...")
-            torch.save(state_dict, (self.checkpoints_dir / f"best_model.tar").as_posix())
+            torch.save(state_dict, (self.checkpoints_dir / "best_model.tar").as_posix())
 
     def _is_best_epoch(self, score, save_max_metric_score=True):
         """

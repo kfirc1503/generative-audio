@@ -12,7 +12,6 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(__file__, "..", "..")))
 import FullSubNet_plus.speech_enhance.audio_zen.metrics as metrics
-from FullSubNet_plus.speech_enhance.audio_zen.utils import prepare_empty_dir
 
 
 def load_wav_paths_from_scp(scp_path, to_abs=True):

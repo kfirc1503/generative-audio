@@ -3,12 +3,11 @@ from typing import Optional,List
 from torch.nn import functional
 from omegaconf import ListConfig
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
-from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.model.base_model import BaseModel
 from FullSubNet_plus.speech_enhance.audio_zen.model.module.sequence_model import SequenceModel
 from FullSubNet_plus.speech_enhance.audio_zen.model.module.attention_model import ChannelSELayer, ChannelECAlayer, \
     ChannelCBAMLayer, \
-    ChannelTimeSenseSELayer, ChannelTimeSenseAttentionSELayer, ChannelTimeSenseSEWeightLayer
+    ChannelTimeSenseSELayer
 import pydantic
 # for log
 from FullSubNet_plus.speech_enhance.utils.logger import log

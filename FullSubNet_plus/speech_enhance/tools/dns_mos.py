@@ -9,7 +9,6 @@ import requests
 import soundfile as sf
 import librosa
 
-from urllib.parse import urlparse, urljoin
 
 # URL for the web service
 SCORING_URI_DNSMOS = 'https://dnsmos.azurewebsites.net/score'

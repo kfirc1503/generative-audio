@@ -1,7 +1,6 @@
 import os
 from glob import glob
 import argparse
-from tqdm import tqdm
 from joblib import Parallel, delayed
 
 def resample_one_wav(wav_file, output_wav_file):

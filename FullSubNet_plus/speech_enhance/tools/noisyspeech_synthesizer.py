@@ -3,11 +3,9 @@
 """
 import glob
 import numpy as np
-import soundfile as sf
 import os
 import argparse
 import yaml
-import configparser as CP
 from ..audio.audiolib import audioread, audiowrite, snr_mixer
 
 def main(cfg):
