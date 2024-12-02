@@ -1,7 +1,6 @@
 # FullSubNet_plus/config/schema.py
 
-from typing import List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig
 from dataset import AudioDataSetConfig
 

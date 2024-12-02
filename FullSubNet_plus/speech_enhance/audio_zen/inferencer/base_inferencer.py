@@ -10,7 +10,6 @@ import torch
 from torch.nn import functional
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import time
 
 from audio_zen.acoustics.feature import stft, istft, mc_stft
 from audio_zen.utils import initialize_module, prepare_device, prepare_empty_dir

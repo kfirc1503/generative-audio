@@ -94,6 +94,6 @@ if __name__ == '__main__':
     print(f"\t is_clipped_wav: {len(is_clipped_wav_list)}")
     print(f"\t is_low_activity: {len(is_low_activity_list)}")
     print(f"\t is_too_short: {len(is_too_short_list)}")
-    print(f"\t dist file:")
+    print("\t dist file:")
     print(f"\t {dist_file.as_posix()}")
     print("=" * 70)

@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from config.schema import Config
 from dataset import AudioDataset
-from utils import prepare_input, model_outputs_to_waveforms, load_pretrained_model, prepare_input_from_waveform
+from utils import model_outputs_to_waveforms, load_pretrained_model, prepare_input_from_waveform
 
 
 @hydra.main(config_path="config", config_name="config")

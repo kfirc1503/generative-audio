@@ -23,7 +23,7 @@ class Trainer(BaseTrainer):
         progress_bar = None
 
         if self.rank == 0:
-            progress_bar = tqdm(total=len(self.train_dataloader), desc=f"Training")
+            progress_bar = tqdm(total=len(self.train_dataloader), desc="Training")
 
         for noisy, clean in self.train_dataloader:
             self.optimizer.zero_grad()
@@ -62,13 +62,13 @@ class Trainer(BaseTrainer):
 
         if self.rank == 0:
             log(f"[Train] Epoch {epoch}, Loss {loss_total / len(self.train_dataloader)}")
-            self.writer.add_scalar(f"Loss/Train", loss_total / len(self.train_dataloader), epoch)
+            self.writer.add_scalar("Loss/Train", loss_total / len(self.train_dataloader), epoch)
 
     @torch.no_grad()
     def _validation_epoch(self, epoch):
         progress_bar = None
         if self.rank == 0:
-            progress_bar = tqdm(total=len(self.valid_dataloader), desc=f"Validation")
+            progress_bar = tqdm(total=len(self.valid_dataloader), desc="Validation")
 
         visualization_n_samples = self.visualization_config["n_samples"]
         visualization_num_workers = self.visualization_config["num_workers"]
@@ -132,7 +132,7 @@ class Trainer(BaseTrainer):
                 progress_bar.update(1)
 
         log(f"[Test] Epoch {epoch}, Loss {loss_total / len(self.valid_dataloader)}")
-        self.writer.add_scalar(f"Loss/Validation_Total", loss_total / len(self.valid_dataloader), epoch)
+        self.writer.add_scalar("Loss/Validation_Total", loss_total / len(self.valid_dataloader), epoch)
 
         for speech_type in ("With_reverb", "No_reverb"):
             log(f"[Test] Epoch {epoch}, {speech_type}, Loss {loss_list[speech_type] / len(self.valid_dataloader)}")

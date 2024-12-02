@@ -1,6 +1,4 @@
 import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib
 
 def read_from_txt(filename):
     ans_dict = {}
