@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 from dataset import AudioDataSetConfig
-from pre_trained_model.model_validator.model_validator import ModelValidatorConfig
+from use_pre_trained_model.model_validator.model_validator import ModelValidatorConfig
 
 
 class AudioConfig(BaseModel):

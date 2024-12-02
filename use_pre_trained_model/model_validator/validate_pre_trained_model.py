@@ -1,4 +1,4 @@
-from pre_trained_model.model_validator.model_validator import ModelValidator
+from use_pre_trained_model.model_validator.model_validator import ModelValidator
 
 # FullSubNet_plus/use_pre_model2.py
 
@@ -6,7 +6,7 @@ import hydra
 from omegaconf import DictConfig
 import torch
 
-from pre_trained_model.model_validator.config.schema import Config
+from use_pre_trained_model.model_validator.config.schema import Config
 from dataset import AudioDataset
 
 import os
