@@ -9,8 +9,7 @@ from torch.utils.data import DataLoader
 
 from config.schema import Config
 from dataset import AudioDataset
-from utils import prepare_input, model_outputs_to_waveforms
-from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus
+from utils import prepare_input, model_outputs_to_waveforms, load_pretrained_model, prepare_input_from_waveform
 
 
 @hydra.main(config_path="config", config_name="config")
@@ -19,21 +18,20 @@ def main(cfg: DictConfig):
     config = Config(**cfg)
 
     # Initialize model
-    model = FullSubNet_Plus(**config.model.dict(exclude={'checkpoint_path', 'device'}))
-    checkpoint = torch.load(config.model.checkpoint_path, map_location="cpu")
-    model.load_state_dict(checkpoint["model"])
-    device = torch.device(config.model.device)
+    model_path:str = config.pre_trained_model.checkpoint_path
+    sub_net_plus_config = config.pre_trained_model.model
+    model = load_pretrained_model(model_path, sub_net_plus_config)
+
+    device = torch.device(config.pre_trained_model.device)
     model.to(device)
     model.eval()
 
     # Setup data paths
-    data_dir = Path("data")
-    noisy_dir = data_dir / "noisy"
-    enhanced_dir = data_dir / "enhanced"
+    enhanced_dir = Path(config.pre_trained_data_model.enhanced_dir_path)
     enhanced_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize dataset and dataloader
-    dataset = AudioDataset(noisy_path=noisy_dir, sample_rate=config.audio.sr)
+    dataset = AudioDataset(config.pre_trained_data_model.dataset)
     dataloader = DataLoader(
         dataset,
         batch_size=config.audio.batch_size,
@@ -43,28 +41,23 @@ def main(cfg: DictConfig):
 
     # Process audio files
     with torch.no_grad():
-        for batch_idx, noisy_wavs in enumerate(dataloader):
-            noisy_wavs = noisy_wavs.to(device)
-
+        for batch_idx, batch in enumerate(dataloader):
+            clean_waveforms, noisy_waveforms = batch
+            clean_waveforms = clean_waveforms.to(device)
+            noisy_waveforms = noisy_waveforms.to(device)
             # Prepare input
-            noisy_mag, noisy_real, noisy_imag = prepare_input(
-                noisy_wavs,
-                config.audio.n_fft,
-                config.audio.hop_length,
-                config.audio.win_length
-            )
-
+            noisy_mag, noisy_real, noisy_imag = prepare_input_from_waveform(noisy_waveforms)
+            model = model.to(device)
             # Forward pass
             enhanced_masks = model(noisy_mag, noisy_real, noisy_imag)
 
             # Convert to waveform
+            orig_len = config.pre_trained_data_model.dataset.sub_sample_length
             enhanced_wavs = model_outputs_to_waveforms(
                 enhanced_masks,
                 noisy_real,
                 noisy_imag,
-                config.audio.n_fft,
-                config.audio.hop_length,
-                config.audio.win_length
+                orig_length= orig_len
             )
 
             # Save enhanced audio

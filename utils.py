@@ -1,6 +1,7 @@
 # Import necessary libraries for audio processing
 import torchaudio
 import torch
+from typing import Union
 import torch.nn.functional as F
 from pathlib import Path
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
@@ -51,13 +52,17 @@ def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags , orig_l
 
     return enhanced_waveforms
 
-def preload_model(model_path: Path, model: FullSubNet_Plus) -> FullSubNet_Plus:
+def preload_model(model_path:Union[Path,str], model: FullSubNet_Plus) -> FullSubNet_Plus:
     """
     Preload model parameters (in "*.tar" format) at the start of experiment.
 
     Args:
         model_path (Path): The file path of the *.tar file
     """
+    if type(model_path) == str:
+        #turn him to path
+        model_path = Path(model_path)
+        #absolute_path = model_path.resolve()
     model_path = model_path.expanduser().absolute()
     assert model_path.exists(), f"The file {model_path.as_posix()} is not exist. please check path."
 
@@ -66,8 +71,8 @@ def preload_model(model_path: Path, model: FullSubNet_Plus) -> FullSubNet_Plus:
     return model
 
 
-def load_pretrained_model(model_path: Path, model_config: FullSubNetPlusConfig) -> FullSubNet_Plus:
-    model = FullSubNet_Plus(**model_config.dict())
+def load_pretrained_model(model_path:Union[Path,str], model_config: FullSubNetPlusConfig) -> FullSubNet_Plus:
+    model = FullSubNet_Plus(model_config)
     model = preload_model(model_path, model)
     return model
 

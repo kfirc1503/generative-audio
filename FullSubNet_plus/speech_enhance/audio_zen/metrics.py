@@ -1,9 +1,11 @@
 import numpy as np
+import scipy.signal
 from mir_eval.separation import bss_eval_sources
 from pesq import pesq
 from pypesq import pesq as nb_pesq
 from pystoi.stoi import stoi
 import librosa
+import scipy.signal as signal
 
 def _scale_bss_eval(references, estimate, idx, compute_sir_sar=True):
     """
@@ -102,13 +104,18 @@ def WB_PESQ(ref, est, sr=16000):
 
 def NB_PESQ(ref, est, sr=16000):
     if sr != 8000:
-        nb_ref = librosa.resample(ref, sr, 8000)
-        nb_est = librosa.resample(est, sr, 8000)
+        pass
+        nb_ref = signal.resample_poly(ref ,up=1, down = 2)
+        nb_est = signal.resample_poly(est ,up=1, down = 2)
+        # nb_ref = librosa.resample(ref, sr, 8000)
+        # nb_est = librosa.resample(est, sr, 8000)
+        # librosa.resample()
     else:
         nb_ref = ref
         nb_est = est
     # nb_pesq downsample to 8000 internally.
-    return nb_pesq(nb_ref, nb_est, 8000)
+    return pesq(sr, nb_ref, nb_est, 'nb')
+    #return nb_pesq(nb_ref, nb_est, 8000)
 
 mos_metrics = None
 def MOSNET(ref, est, sr=16000):
