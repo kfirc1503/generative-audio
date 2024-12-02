@@ -4,10 +4,20 @@ import torch
 from typing import Union
 from pathlib import Path
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
-
+import pydantic
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 
 
+class StftConfig(pydantic.BaseModel):
+    n_fft: int = 512
+    hop_length: int = 256
+    win_length: int = 512
+
+
+class AudioConfig(pydantic.BaseModel):
+    sr: int = 16000
+    stft_configuration: StftConfig
+    
 
 def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags , orig_length):
     """
@@ -75,7 +85,7 @@ def load_pretrained_model(model_path:Union[Path,str], model_config: FullSubNetPl
     return model
 
 
-def prepare_input_from_waveform(waveform: torch.Tensor) -> tuple:
+def prepare_input_from_waveform(waveform , n_fft: int, hop_length: int, win_length: int , device: str) -> tuple:
     """
     Prepare input for FullSubNet_Plus model from a waveform tensor.
 
@@ -92,14 +102,15 @@ def prepare_input_from_waveform(waveform: torch.Tensor) -> tuple:
     if waveform.dim() == 2 and waveform.size(0) > 1:
         pass
         # waveform = waveform.unsqueeze(1)  # Add channel dimension
+    window = torch.hann_window(win_length).to(device)
 
     # Calculate STFT (matching the parameters from the paper)
     stft = torch.stft(
         waveform,
-        n_fft=512,  # Results in 257 frequency bins
-        hop_length=256,  # 50% overlap
-        win_length=512,
-        window=torch.hann_window(512).to(waveform.device),
+        n_fft=n_fft,  # Results in 257 frequency bins
+        hop_length=hop_length,  # 50% overlap
+        win_length=win_length,
+        window=window,
         center = True,
         return_complex=True
     )
@@ -170,3 +181,10 @@ def prepare_input(audio_path: str | Path):
 #
 #     # Convert back to audio if needed
 #     # ... additional processing to convert enhanced magnitude back to waveform
+
+
+def get_device(device_preference='cuda'):
+    """Helper function to get the device to use"""
+    if device_preference == 'cuda' and torch.cuda.is_available():
+        return torch.device('cuda')
+    return torch.device('cpu')

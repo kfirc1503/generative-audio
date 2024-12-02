@@ -1,12 +1,10 @@
 
 
-audio:
-  n_fft: 512
-  win_length: 512
-  hop_length: 256
-  sr: 16000
+data_loader:
   batch_size: 1
   num_workers: 4
+  pin_memory: true
+  shuffle: false
 
 data_config:
   data_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
@@ -36,3 +34,9 @@ model_validator:
     num_groups_in_drop_band: 2
     kersize: [3, 5, 10]
     subband_num: 1
+  audio_config:
+    sr: 16000
+    stft_configuration:
+      n_fft: 512
+      win_length: 512
+      hop_length: 256
