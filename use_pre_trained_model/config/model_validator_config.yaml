@@ -15,7 +15,8 @@ data_config:
     #clean_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
     #noisy_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/noisy"
     noisy_path: "../FullSubNet_plus/data/noisy"
-    sub_sample_length_seconds: 5
+    sub_sample_length_seconds: 8
+    target_dB_FS_floating_value: 10
 
 
 model_validator:

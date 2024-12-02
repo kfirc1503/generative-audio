@@ -40,10 +40,13 @@ def main(cfg: DictConfig):
     validator = ModelValidator(config.model_validator)
 
     # Run validation
+    # metrics_like_article = validator.validate_dataloader_like_article(dataloader)
     metrics = validator.validate_dataloader(dataloader)
 
     # Save results
     validator.save_metrics(metrics, "validation_results.json")
+    # validator.save_metrics(metrics_like_article, "validation_results_like_article.json")
+
 
 if __name__ == "__main__":
     main()

@@ -6,23 +6,25 @@ import torchaudio
 import pydantic
 from torch.utils.data import Dataset
 
-
 class AudioDataSetConfig(pydantic.BaseModel):
     clean_path: Union[str, Path]
     noisy_path: Union[str, Path]
     sample_rate: int = 16000
-    snr_range: Tuple[int, int] = pydantic.Field(default_factory=lambda: (-5, 20))
+    snr_range: Tuple[int, int] = pydantic.Field(default_factory=lambda: (0, 20))
     silence_length: float = 0.2
     sub_sample_length_seconds: float = 3.0
     target_dB_FS: float = -25.0
     target_dB_FS_floating_value: float = 0.0
-    sub_sample_length: int = None
-    silence_sample_length: int = None
+    sub_sample_length: int = pydantic.Field(None, description="Computed from sub_sample_length_seconds * sample_rate")
+    silence_sample_length: int = pydantic.Field(None, description="Computed from silence_length * sample_rate")
 
-    def model_post_init(self, __context=None):
-        # Compute these values after initialization
+    @pydantic.model_validator(mode='after')
+    def compute_lengths(self) -> 'AudioDataSetConfig':
+        """Compute sub_sample_length and silence_sample_length after initialization"""
+        # Compute lengths based on sample rate
         self.sub_sample_length = int(self.sub_sample_length_seconds * self.sample_rate)
         self.silence_sample_length = int(self.silence_length * self.sample_rate)
+        return self
 
 
     # @pydantic.model_validator(mode='before')
