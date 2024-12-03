@@ -135,10 +135,10 @@ class ModelValidator:
             for i in range(batch_size):
                 # Enhance audio
                 enhanced = self.enhance_audio(noisy[i])
-
+                clean_np = clean[i].cpu().numpy()
                 # Calculate metrics
                 metrics = self.calculate_metrics(
-                    clean[i].numpy(),
+                    clean_np,
                     enhanced,
                     sr=16000  # You might want to make this configurable
                 )

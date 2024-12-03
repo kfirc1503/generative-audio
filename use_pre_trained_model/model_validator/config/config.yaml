@@ -17,7 +17,7 @@ data_config:
 
 model_validator:
   model_path: "../FullSubNet_plus/best_model.tar"
-  device: "cpu"
+  device: "cuda"
   model_configuration:
     sb_num_neighbors: 15
     fb_num_neighbors: 0

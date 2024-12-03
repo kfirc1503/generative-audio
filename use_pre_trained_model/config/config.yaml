@@ -22,7 +22,7 @@ pre_trained_data_model:
 pre_trained_model:
   checkpoint_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/best_model.tar"
   #checkpoint_path: "../../../FullSubNet_plus/best_model.tar"
-  device: "cpu"
+  device: "cuda"
   model:
     sb_num_neighbors: 15
     fb_num_neighbors: 0
