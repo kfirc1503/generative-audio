@@ -1,25 +1,23 @@
 
 
-audio:
-  n_fft: 512
-  win_length: 512
-  hop_length: 256
-  sr: 16000
-  batch_size: 1
-  num_workers: 4
+data_loader:
+  batch_size: 8
+  num_workers: 0
+  pin_memory: true
+  shuffle: false
 
 data_config:
   data_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
   dataset:
     clean_path: "../FullSubNet_plus/data/clean"
     noisy_path: "../FullSubNet_plus/data/noisy"
-    sub_sample_length_seconds: 8
-    target_dB_FS_floating_value: 10
+    sub_sample_length_seconds: 10
+    target_dB_FS_floating_value: 0
 
 
 model_validator:
   model_path: "../FullSubNet_plus/best_model.tar"
-  device: "cpu"
+  device: "cuda"
   model_configuration:
     sb_num_neighbors: 15
     fb_num_neighbors: 0
@@ -33,6 +31,12 @@ model_validator:
     sb_model_hidden_size: 384
     weight_init: false
     norm_type: "offline_laplace_norm"
-    num_groups_in_drop_band: 2
+    num_groups_in_drop_band: 1
     kersize: [3, 5, 10]
     subband_num: 1
+  audio_config:
+    sr: 16000
+    stft_configuration:
+      n_fft: 512
+      win_length: 512
+      hop_length: 256

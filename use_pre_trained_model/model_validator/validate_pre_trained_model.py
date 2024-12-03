@@ -8,7 +8,7 @@ import torch
 
 from use_pre_trained_model.model_validator.config.schema import Config
 from dataset import AudioDataset
-
+import utils
 import os
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
@@ -19,6 +19,10 @@ def main(cfg: DictConfig):
     # Convert Hydra config to Pydantic model for validation
     config = Config(**cfg)
 
+        # Get device
+    device = utils.get_device(config.model_validator.device)
+    print(f"Using device: {device}")
+
     dataset = AudioDataset(config.data_config.dataset)
 
     print(f"Total sample pairs in dataset: {len(dataset)}")
@@ -26,10 +30,10 @@ def main(cfg: DictConfig):
     # Create dataloader
     dataloader = torch.utils.data.DataLoader(
         dataset,
-        batch_size=config.audio.batch_size,  # Adjust based on your GPU memory
-        shuffle=False,
-        num_workers=config.audio.num_workers,
-        pin_memory=True
+        batch_size=config.data_loader.batch_size,  # Adjust based on your GPU memory
+        shuffle=config.data_loader.shuffle,
+        num_workers=config.data_loader.num_workers,
+        pin_memory=config.data_loader.pin_memory
     )
 
     # Initialize validator

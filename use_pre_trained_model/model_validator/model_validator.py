@@ -17,6 +17,7 @@ class ModelValidatorConfig(pydantic.BaseModel):
     model_path: str
     model_configuration: FullSubNetPlusConfig
     device: Literal['cpu', 'cuda'] = 'cuda'
+    audio_config: utils.AudioConfig
 
 
 class ModelValidator:
@@ -43,6 +44,7 @@ class ModelValidator:
             # Narrow-band PESQ (8kHz)
             if sr != 8000:
                 # Downsample to 8000 Hz for NB-PESQ
+                #TODO : need to do this generic, there is assumption here of sr=16000
                 nb_clean = signal.resample_poly(clean, up=1, down=2)  # 16000 -> 8000
                 nb_enhanced = signal.resample_poly(enhanced, up=1, down=2)
             else:
@@ -81,12 +83,14 @@ class ModelValidator:
         with torch.no_grad():
             noisy = noisy.to(self.device).unsqueeze(0)
             # Use the mag_complex_full_band_crm_mask inference type
+            # Create window on device
+            window = torch.hann_window(self.config.audio_config.stft_configuration.win_length).to(self.device)
             noisy_complex = torch.stft(
                 noisy,
-                n_fft=512,
-                hop_length=256,
-                win_length=512,
-                window=torch.hann_window(512).to(self.device),
+                n_fft=self.config.audio_config.stft_configuration.n_fft,
+                hop_length=self.config.audio_config.stft_configuration.hop_length,
+                win_length=self.config.audio_config.stft_configuration.win_length,
+                window=window,
                 return_complex=True
             )
 
@@ -106,10 +110,10 @@ class ModelValidator:
 
             enhanced = torch.istft(
                 enhanced_complex,
-                n_fft=512,
-                hop_length=256,
-                win_length=512,
-                window=torch.hann_window(512).to(self.device),
+                n_fft=self.config.audio_config.stft_configuration.n_fft,
+                hop_length=self.config.audio_config.stft_configuration.hop_length,
+                win_length=self.config.audio_config.stft_configuration.win_length,
+                window=window,
                 length=noisy.size(-1)
             )
 
@@ -124,14 +128,17 @@ class ModelValidator:
             noisy, clean = batch
             batch_size = noisy.size(0)
 
+            # Move data to device
+            noisy = noisy.to(self.device)
+            clean = clean.to(self.device)
             # Process each item in batch
             for i in range(batch_size):
                 # Enhance audio
                 enhanced = self.enhance_audio(noisy[i])
-
+                clean_np = clean[i].cpu().numpy()
                 # Calculate metrics
                 metrics = self.calculate_metrics(
-                    clean[i].numpy(),
+                    clean_np,
                     enhanced,
                     sr=16000  # You might want to make this configurable
                 )
