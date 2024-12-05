@@ -1,183 +1,376 @@
+import numpy as np
 import torch
-from typing import Optional
-from torch.nn import functional
-from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
-import pydantic
-import torch
-from typing import Optional, List
-from torch.nn import functional
-from omegaconf import ListConfig
-from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
-from FullSubNet_plus.speech_enhance.audio_zen.model.base_model import BaseModel
-from FullSubNet_plus.speech_enhance.audio_zen.model.module.sequence_model import SequenceModel
-from FullSubNet_plus.speech_enhance.audio_zen.model.module.attention_model import ChannelSELayer, ChannelECAlayer, \
-    ChannelCBAMLayer, \
-    ChannelTimeSenseSELayer
+import torch.nn as nn
+
+## Networks auxiliaries
+## ====================
+def factor_weights(module, factor=None, bias_factor=None):
+    if factor is not None:
+        module.weight.data = module.weight.data * factor
+        if hasattr(module, 'bias') and (module.bias is not None):
+            if bias_factor is None:
+                bias_factor = factor
+            module.bias.data = module.bias.data * factor
+    return module
 
 
-class MultiDirectionConfig(FullSubNetPlusConfig):
-    n_directions: int = 4  # Number of output CRMs for uncertainty
+class ShortcutBlock(nn.Module):
+    def __init__(self, base, shortcut=None, factor=None):
+        super().__init__()
+
+        self.base = base
+        self.shortcut = shortcut
+        self.factor = factor
+
+    def forward(self, x):
+        shortcut = x
+        x = self.base(x)
+        if self.shortcut is not None:
+            shortcut = self.shortcut(shortcut)
+        if self.factor is not None:
+            x = x * self.factor
+        x = x + shortcut
+        return x
 
 
-class MultiDirectionFullSubNet_Plus(FullSubNet_Plus):
-    def __init__(self, config: Optional[MultiDirectionConfig] = None):
-        if config is None:
-            config = MultiDirectionConfig()
+class ResBlock(nn.Module):
+    def __init__(self, dim, dim_out, n_groups=8):
+        super().__init__()
 
-        # Modify config for multiple outputs
-        config.output_size = 2 * config.n_directions  # 2 for real and imaginary parts
-
-        # Initialize parent class
-        super().__init__(config)
-
-        # Store number of directions
-        self.n_directions = config.n_directions
-
-        # Additional channel attention for enhanced input
-        if self.channel_attention_model == "TSSE":
-            self.enhanced_attention = ChannelTimeSenseSELayer(
-                num_channels=self.num_channels,
-                kersize=self.kersize
-            )
-            self.enhanced_attention_real = ChannelTimeSenseSELayer(
-                num_channels=self.num_channels,
-                kersize=self.kersize
-            )
-            self.enhanced_attention_imag = ChannelTimeSenseSELayer(
-                num_channels=self.num_channels,
-                kersize=self.kersize
-            )
-
-        # Modify fullband models for concatenated input
-        input_size = self.num_freqs * 2  # Double for enhanced input
-        self.fb_model = SequenceModel(
-            input_size=input_size,
-            output_size=self.num_freqs,
-            hidden_size=self.fb_model_hidden_size,
-            num_layers=2,
-            bidirectional=False,
-            sequence_model="TCN",
-            output_activate_function=self.fb_output_activate_function
+        self.block = ShortcutBlock(
+            nn.Sequential(
+                nn.Conv2d(dim, dim_out, 3, padding=1),
+                nn.GroupNorm(n_groups, dim_out),
+                nn.SiLU(),
+                nn.Conv2d(dim_out, dim_out, 3, padding=1),
+                nn.GroupNorm(n_groups, dim_out),
+                nn.SiLU(),
+            ),
+            shortcut= nn.Conv2d(dim, dim_out, 1) if dim != dim_out else None,
         )
 
-        self.fb_model_real = SequenceModel(
-            input_size=input_size,
-            output_size=self.num_freqs,
-            hidden_size=self.fb_model_hidden_size,
-            num_layers=2,
-            bidirectional=False,
-            sequence_model="TCN",
-            output_activate_function=self.fb_output_activate_function
-        )
+    def forward(self, x):
+        return self.block(x)
 
-        self.fb_model_imag = SequenceModel(
-            input_size=input_size,
-            output_size=self.num_freqs,
-            hidden_size=self.fb_model_hidden_size,
-            num_layers=2,
-            bidirectional=False,
-            sequence_model="TCN",
-            output_activate_function=self.fb_output_activate_function
-        )
 
-    def forward(self, noisy_mag, noisy_real, noisy_imag,
-                enhanced_mag=None, enhanced_real=None, enhanced_imag=None):
-        """
-        Forward pass with enhanced input and multiple CRM outputs.
+class Attention(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        embedding_channels=None,
+        heads=4,
+    ):
+        super().__init__()
+        self.heads = heads
 
-        Args:
-            noisy_mag: noisy magnitude spectrogram [B, 1, F, T]
-            noisy_real: noisy real part [B, 1, F, T]
-            noisy_imag: noisy imaginary part [B, 1, F, T]
-            enhanced_mag: enhanced magnitude from previous model [B, 1, F, T]
-            enhanced_real: enhanced real part from previous model [B, 1, F, T]
-            enhanced_imag: enhanced imaginary part from previous model [B, 1, F, T]
+        if embedding_channels is None:
+            embedding_channels = in_channels
 
-        Returns:
-            [B, 2*n_directions, F, T] (multiple sets of real and imaginary masks)
-        """
-        # Apply padding
-        noisy_mag = functional.pad(noisy_mag, [0, self.look_ahead])
-        noisy_real = functional.pad(noisy_real, [0, self.look_ahead])
-        noisy_imag = functional.pad(noisy_imag, [0, self.look_ahead])
-        enhanced_mag = functional.pad(enhanced_mag, [0, self.look_ahead])
-        enhanced_real = functional.pad(enhanced_real, [0, self.look_ahead])
-        enhanced_imag = functional.pad(enhanced_imag, [0, self.look_ahead])
+        self.conv_in = nn.Conv1d(in_channels, 3 * embedding_channels, 1, bias=False)
+        self.conv_out = factor_weights(nn.Conv1d(embedding_channels, in_channels, 1), factor=1e-6)
 
-        batch_size, num_channels, num_freqs, num_frames = noisy_mag.size()
+    def forward(self, x):
+        x_in = x
+        shape = x.shape
+        x = x.flatten(2)
 
-        # Process both inputs through attention
-        fb_input_noisy = self.norm(noisy_mag).reshape(batch_size, num_channels * num_freqs, num_frames)
-        fb_input_enhanced = self.norm(enhanced_mag).reshape(batch_size, num_channels * num_freqs, num_frames)
+        x = self.conv_in(x)
+        x = x.unflatten(1, (3, self.heads, -1))
+        q, k, v = x[:, 0], x[:, 1], x[:, 2]
 
-        fb_input_noisy = self.channel_attention(fb_input_noisy)
-        fb_input_enhanced = self.enhanced_attention(fb_input_enhanced)
+        attn = torch.einsum(f"bhki,bhka->bhia", q, k)
+        attn = attn * attn.shape[1] ** -0.5
+        attn = attn.softmax(dim=-1)
+        x = torch.einsum(f"bhia,bhda->bhdi", attn, v)
 
-        # Same for real and imaginary parts
-        fbr_input_noisy = self.norm(noisy_real).reshape(batch_size, num_channels * num_freqs, num_frames)
-        fbr_input_enhanced = self.norm(enhanced_real).reshape(batch_size, num_channels * num_freqs, num_frames)
+        x = x.flatten(1, 2)
+        x = self.conv_out(x)
 
-        fbr_input_noisy = self.channel_attention_real(fbr_input_noisy)
-        fbr_input_enhanced = self.enhanced_attention_real(fbr_input_enhanced)
+        x = x.unflatten(2, shape[2:])
+        x = x + x_in
+        return x
 
-        fbi_input_noisy = self.norm(noisy_imag).reshape(batch_size, num_channels * num_freqs, num_frames)
-        fbi_input_enhanced = self.norm(enhanced_imag).reshape(batch_size, num_channels * num_freqs, num_frames)
 
-        fbi_input_noisy = self.channel_attention_imag(fbi_input_noisy)
-        fbi_input_enhanced = self.enhanced_attention_imag(fbi_input_enhanced)
+## Networks
+## ========
+class UNet(nn.Module):
+    def __init__(
+            self,
+            in_channels=3,
+            out_channels=None,
+            channels_list=(32, 64, 128, 256),
+            bottleneck_channels=512,
+            downsample_list=(False, True, True, True),
+            n_blocks=2,
+            n_blocks_bottleneck=2,
+            min_channels_decoder=64,
+            upscale_factor=1,
+            output_factor=None,
+            n_groups=8,
+        ):
 
-        # Concatenate noisy and enhanced inputs
-        fb_input = torch.cat([fb_input_noisy, fb_input_enhanced], dim=1)
-        fbr_input = torch.cat([fbr_input_noisy, fbr_input_enhanced], dim=1)
-        fbi_input = torch.cat([fbi_input_noisy, fbi_input_enhanced], dim=1)
+        super().__init__()
+        self.max_scale_factor = 2 ** np.sum(downsample_list)
 
-        # Process through fullband models
-        fb_output = self.fb_model(fb_input).reshape(batch_size, 1, num_freqs, num_frames)
-        fbr_output = self.fb_model_real(fbr_input).reshape(batch_size, 1, num_freqs, num_frames)
-        fbi_output = self.fb_model_imag(fbi_input).reshape(batch_size, 1, num_freqs, num_frames)
+        if out_channels is None:
+            out_channels = in_channels
 
-        # Unfold outputs
-        fb_output_unfolded = self.unfold(fb_output, num_neighbor=self.fb_num_neighbors)
-        fb_output_unfolded = fb_output_unfolded.reshape(batch_size, num_freqs, self.fb_num_neighbors * 2 + 1,
-                                                        num_frames)
+        ch = in_channels
 
-        fbr_output_unfolded = self.unfold(fbr_output, num_neighbor=self.fb_num_neighbors)
-        fbr_output_unfolded = fbr_output_unfolded.reshape(batch_size, num_freqs, self.fb_num_neighbors * 2 + 1,
-                                                          num_frames)
+        ## Encoder
+        ## =======
+        self.encoder_blocks = nn.ModuleList([])
+        ch_hidden_list = []
 
-        fbi_output_unfolded = self.unfold(fbi_output, num_neighbor=self.fb_num_neighbors)
-        fbi_output_unfolded = fbi_output_unfolded.reshape(batch_size, num_freqs, self.fb_num_neighbors * 2 + 1,
-                                                          num_frames)
+        layers = []
+        ch_ = channels_list[0]
+        layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
+        ch = ch_
+        self.encoder_blocks.append(nn.Sequential(*layers))
+        ch_hidden_list.append(ch)
 
-        # Process subband
-        noisy_mag_unfolded = self.unfold(noisy_mag, num_neighbor=self.sb_num_neighbors)
-        noisy_mag_unfolded = noisy_mag_unfolded.reshape(batch_size, num_freqs, self.sb_num_neighbors * 2 + 1,
-                                                        num_frames)
+        for i_level in range(len(channels_list)):
+            ch_ = channels_list[i_level]
+            downsample = downsample_list[i_level]
 
-        # Concatenate all features
-        sb_input = torch.cat([noisy_mag_unfolded, fb_output_unfolded, fbr_output_unfolded, fbi_output_unfolded], dim=2)
-        sb_input = self.norm(sb_input)
+            layers = []
+            if downsample:
+                layers.append(nn.MaxPool2d(2))
+            for _ in range(n_blocks):
+                layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
+                ch = ch_
+                layers.append(nn.GroupNorm(n_groups, ch))
+                layers.append(nn.LeakyReLU(0.1))
+            self.encoder_blocks.append(nn.Sequential(*layers))
+            ch_hidden_list.append(ch)
 
-        # Apply drop band if needed
-        if batch_size > 1:
-            sb_input = drop_band(sb_input.permute(0, 2, 1, 3), num_groups=self.num_groups_in_drop_band)
-            num_freqs = sb_input.shape[2]
-            sb_input = sb_input.permute(0, 2, 1, 3)
+        ## Bottleneck
+        ## ==========
+        ch_ = bottleneck_channels
+        layers = []
+        for _ in range(n_blocks_bottleneck):
+            layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
+            ch = ch_
+            layers.append(nn.GroupNorm(n_groups, ch))
+            layers.append(nn.LeakyReLU(0.1))
+        self.bottleneck = nn.Sequential(*layers)
 
-        # Process through subband model
-        sb_input = sb_input.reshape(
-            batch_size * num_freqs,
-            (self.sb_num_neighbors * 2 + 1) + 3 * (self.fb_num_neighbors * 2 + 1),
-            num_frames
-        )
+        ## Decoder
+        ## =======
+        self.decoder_blocks = nn.ModuleList([])
+        for i_level in reversed(range(len(channels_list))):
+            ch_ = max(channels_list[i_level], min_channels_decoder)
+            downsample = downsample_list[i_level]
+            ch = ch + ch_hidden_list.pop()
+            layers = []
 
-        # Get multiple CRM outputs
-        sb_masks = self.sb_model(sb_input)
-        sb_masks = sb_masks.reshape(batch_size, num_freqs, self.n_directions, 2, num_frames)
-        sb_masks = sb_masks.permute(0, 2, 3, 1, 4)  # [B, n_directions, 2, F, T]
+            for _ in range(n_blocks):
+                layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
+                ch = ch_
+                layers.append(nn.GroupNorm(n_groups, ch))
+                layers.append(nn.LeakyReLU(0.1))
+            if downsample:
+                layers.append(nn.Upsample(scale_factor=2, mode='nearest'))
+            self.decoder_blocks.append(nn.Sequential(*layers))
 
-        # Remove look-ahead padding and reshape
-        output = sb_masks[..., self.look_ahead:]
-        output = output.reshape(batch_size, 2 * self.n_directions, num_freqs, -1)
+        ch = ch + ch_hidden_list.pop()
+        ch_ = max(channels_list[0], min_channels_decoder)
+        layers = []
+        if upscale_factor != 1:
+            factors = (2,) *  int(np.log2(upscale_factor))
+            assert (np.prod(factors) == upscale_factor), 'Upscale factor must be a power of 2'
+            for f in factors:
+                layers.append(nn.Conv2d(ch, ch_ * f ** 2, kernel_size=3, padding=1))
+                layers.append(nn.PixelShuffle(f))
+                ch = ch_
+        layers.append(factor_weights(nn.Conv2d(ch, out_channels, 1), factor=output_factor))
+        self.decoder_blocks.append(nn.Sequential(*layers))
 
-        return output
+    def forward(self, x):
+        h = []
+        for block in self.encoder_blocks:
+            x = block(x)
+            h.append(x)
+        
+        x = self.bottleneck(x)
+        for block in self.decoder_blocks:
+            x = torch.cat((x, h.pop()), dim=1)
+            x = block(x)
+
+        return x
+
+
+class ResUNet(nn.Module):
+    def __init__(
+            self,
+            in_channels=3,
+            out_channels=None,
+            channels_list=(128, 128, 256, 256, 512, 512),
+            bottleneck_channels=512,
+            downsample_list=(False, True, True, True, True, True),
+            attn_list=(False, False, False, False, True, False),
+            n_blocks=2,
+            min_channels_decoder=1,
+            upscale_factor=1,
+            output_factor=None,
+            n_groups=8,
+            attn_heads=1,
+        ):
+
+        super().__init__()
+        self.max_scale_factor = 2 ** np.sum(downsample_list)
+
+        if out_channels is None:
+            out_channels = in_channels
+
+        ch = in_channels
+
+        ## Encoder
+        ## =======
+        self.encoder_blocks = nn.ModuleList([])
+        ch_hidden_list = []
+
+        layers = []
+        ch_ = channels_list[0]
+        layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
+        ch = ch_
+        self.encoder_blocks.append(nn.Sequential(*layers))
+        ch_hidden_list.append(ch)
+
+        for i_level in range(len(channels_list)):
+            ch_ = channels_list[i_level]
+            downsample = downsample_list[i_level]
+            attn = attn_list[i_level]
+
+            if downsample:
+                layers = []
+                layers.append(nn.Conv2d(ch, ch, 3, padding=1, stride=2))
+                self.encoder_blocks.append(nn.Sequential(*layers))
+                ch_hidden_list.append(ch)
+
+            for _ in range(n_blocks):
+                layers = []
+                layers.append(ResBlock(ch, ch_, n_groups=n_groups))
+                ch = ch_
+                if attn:
+                    layers.append(Attention(ch, heads=attn_heads))
+                self.encoder_blocks.append(nn.Sequential(*layers))
+                ch_hidden_list.append(ch)
+
+        ## Bottleneck
+        ## ==========
+        ch_ = bottleneck_channels
+        layers = []
+        layers.append(ResBlock(ch, ch_, n_groups=n_groups))
+        ch = ch_
+        layers.append(Attention(ch, heads=attn_heads))
+        layers.append(ResBlock(ch, ch, n_groups=n_groups))
+        self.bottleneck = nn.Sequential(*layers)
+
+        ## Decoder
+        ## =======
+        self.decoder_blocks = nn.ModuleList([])
+        for i_level in reversed(range(len(channels_list))):
+            ch_ = max(channels_list[i_level], min_channels_decoder)
+            downsample = downsample_list[i_level]
+            attn = attn_list[i_level]
+
+            for _ in range(n_blocks):
+                layers = []
+                ch = ch + ch_hidden_list.pop()
+                layers.append(ResBlock(ch, ch_, n_groups=n_groups))
+                ch = ch_
+                if attn:
+                    layers.append(Attention(ch, heads=attn_heads))
+                self.decoder_blocks.append(nn.Sequential(*layers))
+
+            if downsample:
+                layers = []
+                layers.append(ResBlock(ch + ch_hidden_list.pop(), ch, n_groups=n_groups))
+                if attn:
+                    layers.append(Attention(ch, heads=attn_heads))
+                layers.append(nn.Upsample(scale_factor=2, mode='nearest'))
+                layers.append(nn.Conv2d(ch, ch, 3, padding=1))
+                self.decoder_blocks.append(nn.Sequential(*layers))
+
+        layers = []
+        ch_ = max(channels_list[0], min_channels_decoder)
+        ch = ch + ch_hidden_list.pop()
+        layers.append(ResBlock(ch, ch_, n_groups=n_groups))
+        ch = ch_
+        layers.append(nn.GroupNorm(n_groups, ch))
+        layers.append(nn.SiLU())
+        if upscale_factor != 1:
+            factors = (2,) *  int(np.log2(upscale_factor))
+            assert (np.prod(factors) == upscale_factor), 'Upscale factor must be a power of 2'
+            for f in factors:
+                layers.append(nn.Conv2d(ch, ch * f ** 2, kernel_size=3, padding=1))
+                layers.append(nn.PixelShuffle(f))
+        layers.append(factor_weights(nn.Conv2d(ch, out_channels, 1), factor=output_factor))
+        self.decoder_blocks.append(nn.Sequential(*layers))
+
+    def forward(self, x):
+        h = []
+        for block in self.encoder_blocks:
+            x = block(x)
+            h.append(x)
+        
+        x = self.bottleneck(x)
+        for block in self.decoder_blocks:
+            x = torch.cat((x, h.pop()), dim=1)
+            x = block(x)
+
+        return x
+
+
+class ResCNN(nn.Module):
+    def __init__(
+            self,
+            in_channels,
+            out_channels=None,
+            hidden_channels=64,
+            n_blocks=16,
+            upscale_factor=1,
+            output_factor=None,
+        ):
+
+        super().__init__()
+        self.max_scale_factor = 1
+
+        if out_channels is None:
+            out_channels = in_channels
+
+        ch = in_channels
+        layers = []
+
+        ## Input block
+        ## ===========
+        layers.append(nn.Conv2d(ch, hidden_channels, 3, padding=1))
+        ch = hidden_channels
+
+        ## Main block
+        ## ==========
+        main_layers = []
+        for _ in range(n_blocks):
+            layers.append(ShortcutBlock(nn.Sequential(
+                nn.Conv2d(ch, ch, kernel_size=3, padding=1),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(ch, ch, kernel_size=3, padding=1),
+            )))
+        layers.append(nn.Conv2d(ch, ch, 3, padding=1))
+        layers += [ShortcutBlock(nn.Sequential(*main_layers))]
+
+        ## Output block
+        ## ============
+        if upscale_factor != 1:
+            factors = (2,) *  int(np.log2(upscale_factor))
+            assert (np.prod(factors) == upscale_factor), 'Upscale factor must be a power of 2'
+            for f in factors:
+                layers.append(nn.Conv2d(ch, ch * f ** 2, kernel_size=3, padding=1))
+                layers.append(nn.PixelShuffle(f))
+        layers.append(factor_weights(nn.Conv2d(ch, out_channels, kernel_size=3, padding=1), factor=output_factor))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.net(x)
+        return x
