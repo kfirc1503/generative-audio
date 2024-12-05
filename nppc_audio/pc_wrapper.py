@@ -9,41 +9,40 @@ from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_c
 def gram_schmidt_to_crm(x: torch.Tensor) -> torch.Tensor:
     """
     Apply Gram-Schmidt orthogonalization to CRM directions.
+    Direct adaptation of NPPC's implementation for complex CRMs.
 
     Args:
-        x: Input tensor of shape [B, n_dirs, 2, F, T] where:
-           B: batch size
-           n_dirs: number of directions
-           2: real and imaginary components
-           F: frequency bins
-           T: time steps
+        x: Input tensor of shape [B, n_dirs, 2, F, T]
 
     Returns:
         Orthogonalized tensor of the same shape
     """
-    # Combine real and imaginary into complex numbers for orthogonalization
+    # Combine real and imaginary into complex numbers
     x_complex = torch.complex(x[:, :, 0], x[:, :, 1])  # [B, n_dirs, F, T]
 
-    # Reshape to [B*F*T, n_dirs]
-    x_flat = x_complex.permute(0, 2, 3, 1).reshape(-1, x_complex.shape[1])
+    # Reshape to [B, n_dirs, F*T]
+    B, n_dirs, F, T = x_complex.shape
+    x = x_complex.reshape(B, n_dirs, -1)  # [B, n_dirs, F*T]
 
-    # Gram-Schmidt process
-    basis = torch.zeros_like(x_flat)
-    basis[:, 0] = x_flat[:, 0] / torch.norm(x_flat[:, 0:1] + 1e-8, dim=1)
+    x_orth = []
+    proj_vec_list = []
 
-    for i in range(1, x_flat.shape[1]):
-        v = x_flat[:, i]
-        # Project v onto previous basis vectors
-        projections = torch.sum(basis[:, :i].conj() * v.unsqueeze(1), dim=1, keepdim=True) * basis[:, :i]
-        # Subtract projections and normalize
-        w = v.unsqueeze(1) - torch.sum(projections, dim=1, keepdim=True)
-        basis[:, i] = w.squeeze() / (torch.norm(w + 1e-8, dim=1))
+    for i in range(n_dirs):
+        w = x[:, i]  # [B, F*T]
 
-    # Reshape back and split into real/imaginary components
-    basis = basis.reshape(x.shape[0], x.shape[3], x.shape[4], x.shape[1])  # [B, F, T, n_dirs]
-    basis = basis.permute(0, 3, 1, 2)  # [B, n_dirs, F, T]
+        # Project onto all previous vectors
+        for w2 in proj_vec_list:
+            w = w - w2 * torch.sum(w.conj() * w2, dim=1, keepdim=True)
 
-    return torch.stack([basis.real, basis.imag], dim=2)  # [B, n_dirs, 2, F, T]
+        # Normalize
+        w_hat = w.detach() / w.detach().norm(dim=1, keepdim=True)
+
+        x_orth.append(w)
+        proj_vec_list.append(w_hat)
+
+    # Stack and reshape back
+    out = torch.stack(x_orth, dim=1).reshape(B, n_dirs, F, T)
+    return torch.stack([out.real, out.imag], dim=2)
 
 
 class AudioPCWrapper(nn.Module):
