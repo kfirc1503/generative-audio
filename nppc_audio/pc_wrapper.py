@@ -49,7 +49,6 @@ class AudioPCWrapper(nn.Module):
     def __init__(
             self,
             net: nn.Module,
-            pre_net: Optional[nn.Module] = None,
             project_func: Optional[callable] = None,
     ):
         """
@@ -57,13 +56,11 @@ class AudioPCWrapper(nn.Module):
 
         Args:
             net: MultiDirectionFullSubNet_Plus network
-            pre_net: Optional preprocessing network
             project_func: Optional projection function
         """
         super().__init__()
         self.net = net
         self.n_dirs = net.n_directions
-        self.pre_net = pre_net
         self.project_func = project_func
 
     def forward(self, noisy_mag, noisy_real, noisy_imag,
