@@ -54,21 +54,57 @@ class NPPCModel(nn.Module):
 
 
     def forward(self, noisy_waveform: torch.Tensor) -> torch.Tensor:
-        # first we will get the stft components:
-        nfft  = self.config.stft_configuration.nfft
+        """
+        Forward pass of the NPPC audio model. The process follows these steps:
+        1. Convert input waveform to STFT components (mag, real, imag)
+        2. Pass through pretrained restoration model to get CRM
+        3. Apply CRM to get enhanced STFT components
+        4. Pass both noisy and enhanced components through PC wrapper to get principal components
+
+        Args:
+            noisy_waveform: Input noisy audio waveform tensor of shape [B, T]
+                where B is batch size and T is number of time samples
+
+        Returns:
+            w_mat: Principal component directions tensor of shape [B, n_dirs, 2, F, T]
+                where:
+                - B: batch size
+                - n_dirs: number of principal component directions
+                - 2: real and imaginary components
+                - F: number of frequency bins from STFT
+                - T: number of time frames from STFT
+
+        Note:
+            The pretrained model generates a complex ratio mask (CRM) which is used to enhance
+            the noisy input. Both the noisy and enhanced spectrograms are then used by the
+            PC wrapper to compute orthogonal directions in the complex spectrogram space.
+        """
+        # Get STFT components from waveform
+        nfft = self.config.stft_configuration.nfft
         hop_length = self.config.stft_configuration.hop_length
         win_length = self.config.stft_configuration.win_length
-        noisy_mag, noisy_real, noisy_imag = utils.prepare_input_from_waveform(noisy_waveform,nfft,hop_length,win_length,self.device.type)
-        noisy_complex = torch.complex(noisy_mag,noisy_real)
-        # now we can input to noisy stft to the pretrained model
+        noisy_mag, noisy_real, noisy_imag = utils.prepare_input_from_waveform(
+            noisy_waveform, nfft, hop_length, win_length, self.device.type
+        )
+        noisy_complex = torch.complex(noisy_mag, noisy_real)
+
+        # Get CRM from pretrained model
         pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
         pred_crm = pred_crm.permute(0, 2, 3, 1)
         pred_crm = decompress_cIRM(pred_crm)
-        # now we have the pred_crm and we could now get the enhanced stft:
-        enhanced_mag, enhanced_real, enhanced_imag = utils.crm_to_stft_components(pred_crm, noisy_complex)
-        # get all to the pc wrapper to get the PC's matrix:
-        w_mat = self.audio_pc_wrapper(noisy_mag,noisy_real,noisy_imag,enhanced_mag,enhanced_real,enhanced_imag)
-        return w_mat # dims of [B, 2*n_dirs, F, T]
+
+        # Get enhanced STFT components using CRM
+        enhanced_mag, enhanced_real, enhanced_imag = utils.crm_to_stft_components(
+            pred_crm, noisy_complex
+        )
+
+        # Get principal component directions from PC wrapper
+        w_mat = self.audio_pc_wrapper(
+            noisy_mag, noisy_real, noisy_imag,
+            enhanced_mag, enhanced_real, enhanced_imag
+        )
+
+        return w_mat  # [B, n_dirs, 2, F, T]
 
 
 
