@@ -17,9 +17,9 @@ class StftConfig(pydantic.BaseModel):
 class AudioConfig(pydantic.BaseModel):
     sr: int = 16000
     stft_configuration: StftConfig
-    
 
-def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags , orig_length):
+
+def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_length):
     """
     Convert model outputs back to waveforms.
 
@@ -60,7 +60,8 @@ def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags , orig_l
 
     return enhanced_waveforms
 
-def preload_model(model_path:Union[Path,str], model: FullSubNet_Plus) -> FullSubNet_Plus:
+
+def preload_model(model_path: Union[Path, str], model: FullSubNet_Plus) -> FullSubNet_Plus:
     """
     Preload model parameters (in "*.tar" format) at the start of experiment.
 
@@ -68,9 +69,9 @@ def preload_model(model_path:Union[Path,str], model: FullSubNet_Plus) -> FullSub
         model_path (Path): The file path of the *.tar file
     """
     if type(model_path) == str:
-        #turn him to path
+        # turn him to path
         model_path = Path(model_path)
-        #absolute_path = model_path.resolve()
+        # absolute_path = model_path.resolve()
     model_path = model_path.expanduser().absolute()
     assert model_path.exists(), f"The file {model_path.as_posix()} is not exist. please check path."
 
@@ -79,13 +80,13 @@ def preload_model(model_path:Union[Path,str], model: FullSubNet_Plus) -> FullSub
     return model
 
 
-def load_pretrained_model(model_path:Union[Path,str], model_config: FullSubNetPlusConfig) -> FullSubNet_Plus:
+def load_pretrained_model(model_path: Union[Path, str], model_config: FullSubNetPlusConfig) -> FullSubNet_Plus:
     model = FullSubNet_Plus(model_config)
     model = preload_model(model_path, model)
     return model
 
 
-def prepare_input_from_waveform(waveform , n_fft: int, hop_length: int, win_length: int , device: str) -> tuple:
+def prepare_input_from_waveform(waveform, n_fft: int, hop_length: int, win_length: int, device: torch.device) -> tuple:
     """
     Prepare input for FullSubNet_Plus model from a waveform tensor.
 
@@ -111,7 +112,7 @@ def prepare_input_from_waveform(waveform , n_fft: int, hop_length: int, win_leng
         hop_length=hop_length,  # 50% overlap
         win_length=win_length,
         window=window,
-        center = True,
+        center=True,
         return_complex=True
     )
 
@@ -170,6 +171,7 @@ def prepare_input(audio_path: str | Path):
 
     return noisy_mag, noisy_real, noisy_imag
 
+
 # Example usage:
 # pre_train_model.eval()  # Set model to evaluation mode
 # with torch.no_grad():
@@ -188,3 +190,21 @@ def get_device(device_preference='cuda'):
     if device_preference == 'cuda' and torch.cuda.is_available():
         return torch.device('cuda')
     return torch.device('cpu')
+
+
+def crm_to_stft_components(crm: torch.Tensor, noisy_complex: torch.Tensor):
+    enhanced_real = crm[..., 0] * noisy_complex.real - crm[..., 1] * noisy_complex.imag
+    enhanced_imag = crm[..., 1] * noisy_complex.real + crm[..., 0] * noisy_complex.imag
+    enhanced_complex = torch.complex(enhanced_real, enhanced_imag)
+
+    # Get components needed by the model
+    noisy_real = enhanced_complex.real
+    noisy_imag = enhanced_complex.imag
+    noisy_mag = torch.sqrt(noisy_real ** 2 + noisy_imag ** 2)
+
+    # Add batch and channel dimensions [B, 1, F, T]
+    noisy_mag = noisy_mag.unsqueeze(0)
+    noisy_real = noisy_real.unsqueeze(0)
+    noisy_imag = noisy_imag.unsqueeze(0)
+
+    return noisy_mag, noisy_real, noisy_imag

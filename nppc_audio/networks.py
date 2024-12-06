@@ -18,6 +18,10 @@ from FullSubNet_plus.speech_enhance.audio_zen.model.module.attention_model impor
 class MultiDirectionConfig(FullSubNetPlusConfig):
     n_directions: int = 4  # Number of output CRMs for uncertainty
 
+    def make_instance(self):
+        # Create and return an instance of Model using this config
+        return MultiDirectionFullSubNet_Plus(self)
+
 
 class MultiDirectionFullSubNet_Plus(FullSubNet_Plus):
     def __init__(self, config: Optional[MultiDirectionConfig] = None):

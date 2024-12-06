@@ -1,0 +1,75 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import Optional , Literal
+import numpy as np
+import pydantic
+from networks import MultiDirectionFullSubNet_Plus , MultiDirectionConfig
+from pc_wrapper import AudioPCWrapper , AudioPCWrapperConfig
+from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig,FullSubNet_Plus
+import utils
+from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
+
+
+
+class NPPCModelConfig(pydantic.BaseModel):
+    pretrained_restoration_model_configuration: FullSubNetPlusConfig
+    pretrained_restoration_model_path: str
+    audio_pc_wrapper_configuration: AudioPCWrapperConfig
+    stft_configuration: utils.StftConfig
+    device: Literal['cpu', 'cuda'] = 'cuda'
+
+
+class NPPCModel(nn.Module):
+    def __init__(self,config: NPPCModelConfig):
+        """
+        this model uses the pretrained model for resturation, and then the pc wrapper model
+        he will receive the noisy audio,
+        will turn him into a spectrum mag,real,imag
+        and then we got the crm from the pretrained model
+        and from their we can got to the enhanced audio and we are going to keep it in stft form
+        so we got enhanced_mag, enhanced_real, enhanced_imag
+        and we are going to input that into the pc_wrapper and that's it,
+        maybe we will add a method of got restoration audio which be
+        to got the ouput of the pretrained model after converting it with istft
+
+
+        Args:
+            config:
+        """
+        super().__init__()
+        self.config = config
+        self.pretrained_restoration_model = utils.load_pretrained_model(config.pretrained_restoration_model_path , config.pretrained_restoration_model_configuration)
+        self.device = config.device
+        if config.device == 'cuda':
+            # check if gpu is exist
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.pretrained_restoration_model.to(self.device)
+        self.pretrained_restoration_model.eval()
+
+        # same lines!!
+        # self.audio_pc_wrapper = AudioPCWrapper(config.audio_pc_wrapper_configuration)
+        self.audio_pc_wrapper = self.config.audio_pc_wrapper_configuration.make_instance()
+        self.audio_pc_wrapper.to(self.device)
+
+
+    def forward(self, noisy_waveform: torch.Tensor) -> torch.Tensor:
+        # first we will get the stft components:
+        nfft  = self.config.stft_configuration.nfft
+        hop_length = self.config.stft_configuration.hop_length
+        win_length = self.config.stft_configuration.win_length
+        noisy_mag, noisy_real, noisy_imag = utils.prepare_input_from_waveform(noisy_waveform,nfft,hop_length,win_length,self.device.type)
+        noisy_complex = torch.complex(noisy_mag,noisy_real)
+        # now we can input to noisy stft to the pretrained model
+        pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
+        pred_crm = pred_crm.permute(0, 2, 3, 1)
+        pred_crm = decompress_cIRM(pred_crm)
+        # now we have the pred_crm and we could now get the enhanced stft:
+        enhanced_mag, enhanced_real, enhanced_imag = utils.crm_to_stft_components(pred_crm, noisy_complex)
+        # get all to the pc wrapper to get the PC's matrix:
+        w_mat = self.audio_pc_wrapper(noisy_mag,noisy_real,noisy_imag,enhanced_mag,enhanced_real,enhanced_imag)
+        return w_mat # dims of [B, 2*n_dirs, F, T]
+
+
+
+

@@ -1,9 +1,11 @@
+import pydantic
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional
 import numpy as np
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
+from nppc_audio.networks import MultiDirectionConfig
 
 
 def gram_schmidt_to_crm(x: torch.Tensor) -> torch.Tensor:
@@ -44,24 +46,28 @@ def gram_schmidt_to_crm(x: torch.Tensor) -> torch.Tensor:
     out = torch.stack(x_orth, dim=1).reshape(B, n_dirs, F, T)
     return torch.stack([out.real, out.imag], dim=2)
 
+class AudioPCWrapperConfig(pydantic.BaseModel):
+    multi_direction_config:MultiDirectionConfig
+
+    def make_instance(self):
+        # Create and return an instance of Model using this config
+        return AudioPCWrapper(self)
+
 
 class AudioPCWrapper(nn.Module):
     def __init__(
             self,
-            net: nn.Module,
-            project_func: Optional[callable] = None,
+            audio_pc_wrapper_config: AudioPCWrapperConfig,
     ):
         """
         Wrapper for MultiDirectionFullSubNet_Plus that handles CRM directions.
 
         Args:
             net: MultiDirectionFullSubNet_Plus network
-            project_func: Optional projection function
         """
         super().__init__()
-        self.net = net
-        self.n_dirs = net.n_directions
-        self.project_func = project_func
+        self.net = audio_pc_wrapper_config.multi_direction_config.make_instance()
+        self.n_dirs = self.net.n_directions
 
     def forward(self, noisy_mag, noisy_real, noisy_imag,
                 enhanced_mag=None, enhanced_real=None, enhanced_imag=None):
@@ -89,10 +95,6 @@ class AudioPCWrapper(nn.Module):
         # Reshape to separate directions and real/imag components
         batch_size, _, freq_bins, time_steps = crm.shape
         crm = crm.reshape(batch_size, self.n_dirs, 2, freq_bins, time_steps)
-
-        # Apply optional projection
-        if self.project_func is not None:
-            crm = self.project_func(crm)
 
         # Apply Gram-Schmidt orthogonalization
         w_mat = gram_schmidt_to_crm(crm)
