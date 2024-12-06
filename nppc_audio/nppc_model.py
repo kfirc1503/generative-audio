@@ -84,7 +84,7 @@ class NPPCModel(nn.Module):
         hop_length = self.config.stft_configuration.hop_length
         win_length = self.config.stft_configuration.win_length
         noisy_mag, noisy_real, noisy_imag = utils.prepare_input_from_waveform(
-            noisy_waveform, nfft, hop_length, win_length, self.device.type
+            noisy_waveform, nfft, hop_length, win_length, self.device
         )
         noisy_complex = torch.complex(noisy_mag, noisy_real)
 
