@@ -89,8 +89,14 @@ class AudioPCWrapper(nn.Module):
         crm = self.net(noisy_mag, noisy_real, noisy_imag,
                        enhanced_mag, enhanced_real, enhanced_imag)
 
-        # Decompress CRM if using compression
+        # Permute to match FullSubNet+ format [B, F, T, 2*n_dirs]
+        crm = crm.permute(0, 2, 3, 1)
+
+        # Decompress CRM
         crm = decompress_cIRM(crm)
+
+        # Permute back to our working format [B, 2*n_dirs, F, T]
+        crm = crm.permute(0, 3, 1, 2)
 
         # Reshape to separate directions and real/imag components
         batch_size, _, freq_bins, time_steps = crm.shape
