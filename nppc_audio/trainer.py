@@ -23,7 +23,7 @@ class NPPCAudioTrainerConfig(pydantic.BaseModel):
     log_interval: int = 100
     second_moment_loss_lambda: float = 1.0
     second_moment_loss_grace: int = 1000
-
+    step: float = 0
 
 class NPPCAudioTrainer(nn.Module):
     def __init__(self, config: NPPCAudioTrainerConfig):
@@ -61,8 +61,8 @@ class NPPCAudioTrainer(nn.Module):
 
         Args:
             batch: Dictionary containing:
-                - noisy_complex: [B, F, T] Complex STFT of noisy speech
-                - clean_complex: [B, F, T] Complex STFT of clean speech
+                - noisy_complex: [B,T]
+                - clean_complex: [B,T]
         Returns:
             tuple: (objective, log_dict)
         """
@@ -78,18 +78,14 @@ class NPPCAudioTrainer(nn.Module):
         # Flatten frequency and time dimensions for PC computation
         w_mat_flat = w_mat.reshape(B, n_dirs, 2, -1)  # [B, n_dirs, 2, F*T]
 
-        # Compute true CRM (target)
-        true_crm = clean_complex / (noisy_complex + 1e-8)  # [B, F, T]
-        true_crm = torch.stack([true_crm.real, true_crm.imag], dim=1)  # [B, 2, F, T]
-        true_crm_flat = true_crm.reshape(B, 2, -1)  # [B, 2, F*T]
-
-        gt_cIRM = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
-        gt_cIRM = drop_band(
-            gt_cIRM.permute(0, 3, 1, 2),  # [B, 2, F ,T]
+        gt_crm = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
+        gt_crm = drop_band(
+            gt_crm.permute(0, 3, 1, 2),  # [B, 2, F ,T]
             self.model.module.num_groups_in_drop_band
         )
-        gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
-
+        #not sure if necessary to turn it back to [B,F,T,2]
+        # gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
+        gt_crm_flat = gt_crm.reshape(B, 2, -1)  # [B,2,F*T]
 
         # Compute norms of each CRM direction
         w_norms = torch.norm(w_mat_flat, dim=(2, 3))  # [B, n_dirs]
@@ -102,7 +98,7 @@ class NPPCAudioTrainer(nn.Module):
         pred_crm_flat = pred_crm.reshape(B, 2, -1)  # [B, 2, F*T]
 
         # Compute error in CRM domain
-        err = (true_crm_flat - pred_crm_flat)  # [B, 2, F*T]
+        err = (gt_crm_flat - pred_crm_flat)  # [B, 2, F*T]
 
         # Normalize error
         err_norm = torch.norm(err, dim=(1, 2))  # [B]
@@ -119,9 +115,9 @@ class NPPCAudioTrainer(nn.Module):
         second_moment_mse = (w_norms.pow(2) - err_proj.detach().pow(2)).pow(2)
 
         # Compute final objective with adaptive weighting
-        second_moment_loss_lambda = -1 + 2 * model.step / model.second_moment_loss_grace
+        second_moment_loss_lambda = -1 + 2 * self.config.step / self.config.second_moment_loss_grace
         second_moment_loss_lambda = max(min(second_moment_loss_lambda, 1), 1e-6)
-        second_moment_loss_lambda *= model.second_moment_loss_lambda
+        second_moment_loss_lambda *= self.config.second_moment_loss_lambda
 
         objective = reconst_err.mean() + second_moment_loss_lambda * second_moment_mse.mean()
 
