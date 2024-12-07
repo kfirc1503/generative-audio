@@ -9,7 +9,9 @@ from nppc_model import NPPCModelConfig, NPPCModel
 from use_pre_trained_model.model_validator.config.schema import DataConfig
 from dataset import AudioDataset, AudioDataSetConfig
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import mag_phase, drop_band
-from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_complex_ideal_ratio_mask, decompress_cIRM, build_ideal_ratio_mask
+from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_complex_ideal_ratio_mask, decompress_cIRM, \
+    build_ideal_ratio_mask
+
 
 class NPPCAudioTrainerConfig(pydantic.BaseModel):
     """Configuration for NPPCAudio trainer"""
@@ -24,6 +26,7 @@ class NPPCAudioTrainerConfig(pydantic.BaseModel):
     second_moment_loss_lambda: float = 1.0
     second_moment_loss_grace: int = 1000
     step: float = 0
+
 
 class NPPCAudioTrainer(nn.Module):
     def __init__(self, config: NPPCAudioTrainerConfig):
@@ -77,25 +80,16 @@ class NPPCAudioTrainer(nn.Module):
 
         # Flatten frequency and time dimensions for PC computation
         w_mat_flat = w_mat.reshape(B, n_dirs, 2, -1)  # [B, n_dirs, 2, F*T]
+        num_groups_in_drop_band = self.config.nppc_model_configuration.audio_pc_wrapper_configuration.multi_direction_config.num_groups_in_drop_band
 
-        gt_crm = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
-        gt_crm = drop_band(
-            gt_crm.permute(0, 3, 1, 2),  # [B, 2, F ,T]
-            self.model.module.num_groups_in_drop_band
-        )
-        #not sure if necessary to turn it back to [B,F,T,2]
-        # gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
-        gt_crm_flat = gt_crm.reshape(B, 2, -1)  # [B,2,F*T]
+        gt_crm_flat, pred_crm, pred_crm_flat = self._get_true_and_pred_crm(B, clean_complex, model, noisy_complex,
+                                                                           num_groups_in_drop_band)
 
         # Compute norms of each CRM direction
         w_norms = torch.norm(w_mat_flat, dim=(2, 3))  # [B, n_dirs]
 
         # Normalize CRM directions
         w_hat_mat = w_mat_flat / (w_norms[..., None, None] + 1e-8)  # [B, n_dirs, 2, F*T]
-
-        # Get enhanced CRM from model's prediction
-        pred_crm = model.get_pred_crm(noisy_complex)  # [B, 2, F, T]
-        pred_crm_flat = pred_crm.reshape(B, 2, -1)  # [B, 2, F*T]
 
         # Compute error in CRM domain
         err = (gt_crm_flat - pred_crm_flat)  # [B, 2, F*T]
@@ -138,3 +132,18 @@ class NPPCAudioTrainer(nn.Module):
         }
 
         return objective, log
+
+    @staticmethod
+    def _get_true_and_pred_crm(batch_size, clean_complex, model, noisy_complex, num_groups_in_drop_band):
+        gt_crm = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
+        gt_crm = drop_band(
+            gt_crm.permute(0, 3, 1, 2),  # [B, 2, F ,T]
+            num_groups_in_drop_band
+        )
+        # not sure if necessary to turn it back to [B,F,T,2]
+        # gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
+        gt_crm_flat = gt_crm.reshape(batch_size, 2, -1)  # [B,2,F*T]
+        # Get enhanced CRM from model's prediction
+        pred_crm = model.get_pred_crm(noisy_complex)  # [B, 2, F, T]
+        pred_crm_flat = pred_crm.reshape(batch_size, 2, -1)  # [B, 2, F*T]
+        return gt_crm_flat, pred_crm, pred_crm_flat
