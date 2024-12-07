@@ -106,6 +106,21 @@ class NPPCModel(nn.Module):
 
         return w_mat  # [B, n_dirs, 2, F, T]
 
+    def get_pred_crm(self , noisy_waveform: torch.Tensor) -> torch.Tensor:
+        # Get STFT components from waveform
+        nfft = self.config.stft_configuration.nfft
+        hop_length = self.config.stft_configuration.hop_length
+        win_length = self.config.stft_configuration.win_length
+        noisy_mag, noisy_real, noisy_imag = utils.prepare_input_from_waveform(
+            noisy_waveform, nfft, hop_length, win_length, self.device
+        )
+        noisy_complex = torch.complex(noisy_mag, noisy_real)
+
+        # Get CRM from pretrained model
+        pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
+        pred_crm = pred_crm.permute(0, 2, 3, 1)
+        pred_crm = decompress_cIRM(pred_crm)
+        return pred_crm
 
 
 
