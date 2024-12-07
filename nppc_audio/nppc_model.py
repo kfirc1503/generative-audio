@@ -19,6 +19,10 @@ class NPPCModelConfig(pydantic.BaseModel):
     stft_configuration: utils.StftConfig
     device: Literal['cpu', 'cuda'] = 'cuda'
 
+    def make_instance(self):
+        # Create and return an instance of Model using this config
+        return AudioPCWrapper(self)
+
 
 class NPPCModel(nn.Module):
     def __init__(self,config: NPPCModelConfig):
