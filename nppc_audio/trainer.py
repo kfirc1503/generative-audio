@@ -26,7 +26,6 @@ class NPPCAudioTrainerConfig(pydantic.BaseModel):
     log_interval: int = 100
     second_moment_loss_lambda: float = 1.0
     second_moment_loss_grace: int = 1000
-    step: float = 0
 
 
 class NPPCAudioTrainer(nn.Module):
