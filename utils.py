@@ -36,7 +36,8 @@ def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_le
 
     # Decompress the complex ideal ratio mask
     enhanced_masks = decompress_cIRM(enhanced_masks)
-
+    noisy_reals = noisy_reals.squeeze(1)
+    noisy_imags = noisy_imags.squeeze(1)
     # Remove channel dimension from noisy components
     enhanced_imags, enhanced_reals = noisy_to_enhanced(enhanced_masks, noisy_imags, noisy_reals)
 
@@ -60,8 +61,6 @@ def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_le
 
 
 def noisy_to_enhanced(enhanced_masks, noisy_imags, noisy_reals):
-    noisy_reals = noisy_reals.squeeze(1)
-    noisy_imags = noisy_imags.squeeze(1)
     # Apply mask using the complex multiplication formula
     enhanced_reals = enhanced_masks[..., 0] * noisy_reals - enhanced_masks[..., 1] * noisy_imags
     enhanced_imags = enhanced_masks[..., 1] * noisy_reals + enhanced_masks[..., 0] * noisy_imags
@@ -202,6 +201,8 @@ def get_device(device_preference='cuda'):
 def crm_to_stft_components(crm: torch.Tensor, noisy_real: torch.Tensor, noisy_imag: torch.Tensor) -> tuple[
     torch.Tensor, torch.Tensor, torch.Tensor]:
     # Remove channel dimension from noisy components
+    noisy_reals = noisy_real.squeeze(1)
+    noisy_imags = noisy_imag.squeeze(1)
     enhanced_real, enhanced_imag = noisy_to_enhanced(crm,noisy_real, noisy_imag)
 
     enhanced_mag = torch.sqrt(enhanced_real ** 2 + enhanced_imag ** 2)
