@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import pydantic
 from nppc_audio.nppc_model import NPPCModelConfig, NPPCModel
-#from nppc_model import NPPCModelConfig
+# from nppc_model import NPPCModelConfig
 from use_pre_trained_model.model_validator.config.schema import DataConfig, DataLoaderConfig
 from dataset import AudioDataset
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
@@ -10,12 +10,13 @@ from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_comple
 from tqdm.auto import tqdm
 from nppc.auxil import LoopLoader
 
+
 class NPPCAudioTrainerConfig(pydantic.BaseModel):
     """Configuration for NPPCAudio trainer"""
     nppc_model_configuration: NPPCModelConfig
     data_configuration: DataConfig
     data_loader_configuration: DataLoaderConfig
-    #output_dir: str
+    # output_dir: str
     learning_rate: float = 1e-4
     device: str = "cuda"
     save_interval: int = 10
@@ -29,7 +30,7 @@ class NPPCAudioTrainer(nn.Module):
         super().__init__()
         self.config = config
         ## this is suppose to be the same thing
-        #self.nppc_model = self.config.nppc_model_configuration.make_instance()
+        # self.nppc_model = self.config.nppc_model_configuration.make_instance()
         self.nppc_model = NPPCModel(self.config.nppc_model_configuration)
         self.device = self.config.device
         # create data loader:
@@ -96,24 +97,26 @@ class NPPCAudioTrainer(nn.Module):
 
         Args:
             batch: Dictionary containing:
-                - noisy_complex: [B,T]
-                - clean_complex: [B,T]
+                - noisy_waveform: [B,T]
+                - clean_waveform: [B,T]
         Returns:
             tuple: (objective, log_dict)
         """
         model = self.nppc_model
         # Get batch data
-        noisy_complex, clean_complex = batch
+        noisy_waveform, clean_waveform = batch
         # Get predicted CRM directions (our PC directions)
-        w_mat = model(noisy_complex)  # [B, n_dirs, 2, F, T]
+        w_mat = model(noisy_waveform)  # [B, n_dirs, 2, F, T]
         B, n_dirs, _, F, T = w_mat.shape
         # Flatten frequency and time dimensions for PC computation
         w_mat_flat = w_mat.reshape(B, n_dirs, 2, -1)  # [B, n_dirs, 2, F*T]
         # get CRMS
         num_groups_in_drop_band = self.config.nppc_model_configuration.audio_pc_wrapper_configuration.multi_direction_configuration.num_groups_in_drop_band
 
-        gt_crm_flat, pred_crm, pred_crm_flat = self._get_true_and_pred_crm(B, clean_complex, model, noisy_complex,
+        gt_crm, pred_crm = self._get_true_and_pred_crm(B, clean_waveform, model, noisy_waveform,
                                                                            num_groups_in_drop_band)
+        pred_crm_flat = pred_crm.reshape(B, 2, -1)  # [B, 2, F*T]
+        gt_crm_flat = gt_crm.reshape(B, 2, -1)  # [B,2,F*T]
 
         # Compute norms of each CRM direction
         w_norms = torch.norm(w_mat_flat, dim=(2, 3))  # [B, n_dirs]
@@ -136,8 +139,8 @@ class NPPCAudioTrainer(nn.Module):
 
         # Store logs
         log = {
-            'noisy_complex': noisy_complex,
-            'clean_complex': clean_complex,
+            'noisy_complex': noisy_waveform,
+            'clean_complex': clean_waveform,
             'pred_crm': pred_crm.detach(),
             'w_mat': w_mat.detach(),
 
@@ -159,17 +162,26 @@ class NPPCAudioTrainer(nn.Module):
         objective = reconst_err.mean() + second_moment_loss_lambda * second_moment_mse.mean()
         return objective
 
-    @staticmethod
-    def _get_true_and_pred_crm(batch_size, clean_complex, model, noisy_complex, num_groups_in_drop_band):
-        gt_crm = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
+    def _get_true_and_pred_crm(self, batch_size, clean_complex, model, noisy_complex, num_groups_in_drop_band):
+        nfft = self.config.nppc_model_configuration.stft_configuration.nfft
+        hop_length = self.config.nppc_model_configuration.stft_configuration.hop_length
+        win_length = self.config.nppc_model_configuration.stft_configuration.win_length
+
+        window = torch.hann_window(win_length).to(self.device)
+
+        clean_complex_stft = torch.stft(clean_complex, nfft, hop_length=hop_length, win_length=win_length,
+                                        window=window, return_complex=True)
+
+        noisy_complex_stft = torch.stft(noisy_complex, nfft, hop_length=hop_length, win_length=win_length, window=window,
+                                      return_complex=True)
+
+        gt_crm = build_complex_ideal_ratio_mask(noisy_complex_stft, clean_complex_stft)  # [B, F, T, 2]
         gt_crm = drop_band(
             gt_crm.permute(0, 3, 1, 2),  # [B, 2, F ,T]
             num_groups_in_drop_band
         )
         # not sure if necessary to turn it back to [B,F,T,2]
         # gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
-        gt_crm_flat = gt_crm.reshape(batch_size, 2, -1)  # [B,2,F*T]
         # Get enhanced CRM from model's prediction
         pred_crm = model.get_pred_crm(noisy_complex)  # [B, 2, F, T]
-        pred_crm_flat = pred_crm.reshape(batch_size, 2, -1)  # [B, 2, F*T]
-        return gt_crm_flat, pred_crm, pred_crm_flat
+        return gt_crm, pred_crm
