@@ -51,6 +51,7 @@ class NPPCAudioTrainer(nn.Module):
             pin_memory=config.data_loader.pin_memory
         )
         self.dataloader = dataloader
+        self.step = 0
 
     def train(self, n_steps=None, n_epochs=None):
         """
@@ -157,7 +158,7 @@ class NPPCAudioTrainer(nn.Module):
         return objective, log
 
     def _calculate_final_objective(self, reconst_err, second_moment_mse):
-        second_moment_loss_lambda = -1 + 2 * self.config.step / self.config.second_moment_loss_grace
+        second_moment_loss_lambda = -1 + 2 * self.step / self.config.second_moment_loss_grace
         second_moment_loss_lambda = max(min(second_moment_loss_lambda, 1), 1e-6)
         second_moment_loss_lambda *= self.config.second_moment_loss_lambda
         objective = reconst_err.mean() + second_moment_loss_lambda * second_moment_mse.mean()
