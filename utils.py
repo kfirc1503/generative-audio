@@ -201,8 +201,8 @@ def get_device(device_preference='cuda'):
 def crm_to_stft_components(crm: torch.Tensor, noisy_real: torch.Tensor, noisy_imag: torch.Tensor) -> tuple[
     torch.Tensor, torch.Tensor, torch.Tensor]:
     # Remove channel dimension from noisy components
-    noisy_reals = noisy_real.squeeze(1)
-    noisy_imags = noisy_imag.squeeze(1)
+    noisy_real = noisy_real.squeeze(1)
+    noisy_imag = noisy_imag.squeeze(1)
     enhanced_real, enhanced_imag = noisy_to_enhanced(crm,noisy_real, noisy_imag)
 
     enhanced_mag = torch.sqrt(enhanced_real ** 2 + enhanced_imag ** 2)
