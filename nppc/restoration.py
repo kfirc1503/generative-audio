@@ -7,12 +7,10 @@ import datetime
 import numpy as np
 import json
 import tqdm.auto as tqdm
-import plotly
 import plotly.graph_objects as go
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.parallel import DistributedDataParallel as DDP
 import torchinfo
 
 from . import auxil
