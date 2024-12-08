@@ -113,8 +113,8 @@ class NPPCAudioTrainer(nn.Module):
         # get CRMS
         num_groups_in_drop_band = self.config.nppc_model_configuration.audio_pc_wrapper_configuration.multi_direction_configuration.num_groups_in_drop_band
 
-        gt_crm, pred_crm = self._get_true_and_pred_crm(B, clean_waveform, model, noisy_waveform,
-                                                                           num_groups_in_drop_band)
+        gt_crm, pred_crm = self._get_true_and_pred_crm(clean_waveform, model, noisy_waveform,
+                                                       num_groups_in_drop_band)
         pred_crm_flat = pred_crm.reshape(B, 2, -1)  # [B, 2, F*T]
         gt_crm_flat = gt_crm.reshape(B, 2, -1)  # [B,2,F*T]
 
@@ -170,10 +170,10 @@ class NPPCAudioTrainer(nn.Module):
         window = torch.hann_window(win_length).to(self.device)
 
         clean_complex = torch.stft(clean_waveform, nfft, hop_length=hop_length, win_length=win_length,
-                                        window=window, return_complex=True)
+                                   window=window, return_complex=True)
 
         noisy_complex = torch.stft(noisy_waveform, nfft, hop_length=hop_length, win_length=win_length, window=window,
-                                        return_complex=True)
+                                   return_complex=True)
 
         gt_crm = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
         gt_crm = drop_band(
@@ -183,5 +183,8 @@ class NPPCAudioTrainer(nn.Module):
         # not sure if necessary to turn it back to [B,F,T,2]
         # gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
         # Get enhanced CRM from model's prediction
-        pred_crm = model.get_pred_crm(noisy_waveform)  # [B, 2, F, T]
+        pred_crm = model.get_pred_crm(noisy_waveform)  # [B,2,F,T]
+        pred_crm = drop_band(pred_crm, num_groups_in_drop_band)
+
+        # pred_crm = pred_crm.permute(0, 3, 1, 2) # [B,2,F,T]
         return gt_crm, pred_crm

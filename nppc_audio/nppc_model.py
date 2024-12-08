@@ -125,7 +125,7 @@ class NPPCModel(nn.Module):
 
         # Get CRM from pretrained model
         pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
-        pred_crm = pred_crm.permute(0, 2, 3, 1)
+        #pred_crm = pred_crm.permute(0, 2, 3, 1)
         pred_crm = decompress_cIRM(pred_crm)
         return pred_crm
 
