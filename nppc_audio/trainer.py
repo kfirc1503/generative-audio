@@ -162,20 +162,20 @@ class NPPCAudioTrainer(nn.Module):
         objective = reconst_err.mean() + second_moment_loss_lambda * second_moment_mse.mean()
         return objective
 
-    def _get_true_and_pred_crm(self, batch_size, clean_complex, model, noisy_complex, num_groups_in_drop_band):
+    def _get_true_and_pred_crm(self, clean_waveform, model, noisy_waveform, num_groups_in_drop_band):
         nfft = self.config.nppc_model_configuration.stft_configuration.nfft
         hop_length = self.config.nppc_model_configuration.stft_configuration.hop_length
         win_length = self.config.nppc_model_configuration.stft_configuration.win_length
 
         window = torch.hann_window(win_length).to(self.device)
 
-        clean_complex_stft = torch.stft(clean_complex, nfft, hop_length=hop_length, win_length=win_length,
+        clean_complex = torch.stft(clean_waveform, nfft, hop_length=hop_length, win_length=win_length,
                                         window=window, return_complex=True)
 
-        noisy_complex_stft = torch.stft(noisy_complex, nfft, hop_length=hop_length, win_length=win_length, window=window,
-                                      return_complex=True)
+        noisy_complex = torch.stft(noisy_waveform, nfft, hop_length=hop_length, win_length=win_length, window=window,
+                                        return_complex=True)
 
-        gt_crm = build_complex_ideal_ratio_mask(noisy_complex_stft, clean_complex_stft)  # [B, F, T, 2]
+        gt_crm = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
         gt_crm = drop_band(
             gt_crm.permute(0, 3, 1, 2),  # [B, 2, F ,T]
             num_groups_in_drop_band
@@ -183,5 +183,5 @@ class NPPCAudioTrainer(nn.Module):
         # not sure if necessary to turn it back to [B,F,T,2]
         # gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
         # Get enhanced CRM from model's prediction
-        pred_crm = model.get_pred_crm(noisy_complex)  # [B, 2, F, T]
+        pred_crm = model.get_pred_crm(noisy_waveform)  # [B, 2, F, T]
         return gt_crm, pred_crm
