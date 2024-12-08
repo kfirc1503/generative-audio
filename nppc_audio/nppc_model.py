@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 from typing import Literal
 import pydantic
-from pc_wrapper import AudioPCWrapper , AudioPCWrapperConfig
+from nppc_audio.pc_wrapper import AudioPCWrapper,AudioPCWrapperConfig
+#from pc_wrapper import AudioPCWrapper , AudioPCWrapperConfig
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig
 import utils
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
@@ -49,8 +50,8 @@ class NPPCModel(nn.Module):
         self.pretrained_restoration_model.eval()
 
         # same lines!!
-        # self.audio_pc_wrapper = AudioPCWrapper(config.audio_pc_wrapper_configuration)
-        self.audio_pc_wrapper = self.config.audio_pc_wrapper_configuration.make_instance()
+        self.audio_pc_wrapper = AudioPCWrapper(config.audio_pc_wrapper_configuration)
+        #self.audio_pc_wrapper = self.config.audio_pc_wrapper_configuration.make_instance()
         self.audio_pc_wrapper.to(self.device)
 
 

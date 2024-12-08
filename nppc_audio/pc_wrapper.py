@@ -2,7 +2,7 @@ import pydantic
 import torch
 import torch.nn as nn
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
-from nppc_audio.networks import MultiDirectionConfig
+from nppc_audio.networks import MultiDirectionConfig , MultiDirectionFullSubNet_Plus
 
 
 def gram_schmidt_to_crm(x: torch.Tensor) -> torch.Tensor:
@@ -44,7 +44,7 @@ def gram_schmidt_to_crm(x: torch.Tensor) -> torch.Tensor:
     return torch.stack([out.real, out.imag], dim=2)
 
 class AudioPCWrapperConfig(pydantic.BaseModel):
-    multi_direction_config:MultiDirectionConfig
+    multi_direction_configuration:MultiDirectionConfig
 
     def make_instance(self):
         # Create and return an instance of Model using this config
@@ -63,7 +63,8 @@ class AudioPCWrapper(nn.Module):
             net: MultiDirectionFullSubNet_Plus network
         """
         super().__init__()
-        self.net = audio_pc_wrapper_config.multi_direction_config.make_instance()
+        #self.net = audio_pc_wrapper_config.multi_direction_configuration.make_instance()
+        self.net = MultiDirectionFullSubNet_Plus(audio_pc_wrapper_config.multi_direction_configuration)
         self.n_dirs = self.net.n_directions
 
     def forward(self, noisy_mag, noisy_real, noisy_imag,

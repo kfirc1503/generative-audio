@@ -87,7 +87,7 @@ class ModelValidator:
             window = torch.hann_window(self.config.audio_config.stft_configuration.win_length).to(self.device)
             noisy_complex = torch.stft(
                 noisy,
-                n_fft=self.config.audio_config.stft_configuration.n_fft,
+                n_fft=self.config.audio_config.stft_configuration.nfft,
                 hop_length=self.config.audio_config.stft_configuration.hop_length,
                 win_length=self.config.audio_config.stft_configuration.win_length,
                 window=window,
@@ -110,7 +110,7 @@ class ModelValidator:
 
             enhanced = torch.istft(
                 enhanced_complex,
-                n_fft=self.config.audio_config.stft_configuration.n_fft,
+                n_fft=self.config.audio_config.stft_configuration.nfft,
                 hop_length=self.config.audio_config.stft_configuration.hop_length,
                 win_length=self.config.audio_config.stft_configuration.win_length,
                 window=window,

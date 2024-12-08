@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 import pydantic
-from nppc_model import NPPCModelConfig
-from use_pre_trained_model.model_validator.config.schema import DataConfig
+from nppc_audio.nppc_model import NPPCModelConfig, NPPCModel
+#from nppc_model import NPPCModelConfig
+from use_pre_trained_model.model_validator.config.schema import DataConfig, DataLoaderConfig
 from dataset import AudioDataset
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_complex_ideal_ratio_mask
@@ -13,14 +14,14 @@ class NPPCAudioTrainerConfig(pydantic.BaseModel):
     """Configuration for NPPCAudio trainer"""
     nppc_model_configuration: NPPCModelConfig
     data_configuration: DataConfig
-    output_dir: str
+    data_loader_configuration: DataLoaderConfig
+    #output_dir: str
     learning_rate: float = 1e-4
-    n_epochs: int = 100
     device: str = "cuda"
     save_interval: int = 10
     log_interval: int = 100
     second_moment_loss_lambda: float = 1.0
-    second_moment_loss_grace: int = 1000
+    second_moment_loss_grace: int = 500
 
 
 class NPPCAudioTrainer(nn.Module):
@@ -28,21 +29,21 @@ class NPPCAudioTrainer(nn.Module):
         super().__init__()
         self.config = config
         ## this is suppose to be the same thing
-        self.nppc_model = self.config.nppc_model_configuration.make_instance()
-        # self.nppc_model = NPPCModel(self.nppc_model)
+        #self.nppc_model = self.config.nppc_model_configuration.make_instance()
+        self.nppc_model = NPPCModel(self.config.nppc_model_configuration)
         self.device = self.config.device
         # create data loader:
-        dataset = AudioDataset(config.data_config.dataset)
+        dataset = AudioDataset(config.data_configuration.dataset)
 
         print(f"Total sample pairs in dataset: {len(dataset)}")
 
         # Create dataloader
         dataloader = torch.utils.data.DataLoader(
             dataset,
-            batch_size=config.data_loader.batch_size,  # Adjust based on your GPU memory
-            shuffle=config.data_loader.shuffle,
-            num_workers=config.data_loader.num_workers,
-            pin_memory=config.data_loader.pin_memory
+            batch_size=config.data_loader_configuration.batch_size,  # Adjust based on your GPU memory
+            shuffle=config.data_loader_configuration.shuffle,
+            num_workers=config.data_loader_configuration.num_workers,
+            pin_memory=config.data_loader_configuration.pin_memory
         )
         self.dataloader = dataloader
         self.step = 0
@@ -108,8 +109,8 @@ class NPPCAudioTrainer(nn.Module):
         B, n_dirs, _, F, T = w_mat.shape
         # Flatten frequency and time dimensions for PC computation
         w_mat_flat = w_mat.reshape(B, n_dirs, 2, -1)  # [B, n_dirs, 2, F*T]
-        # ger CRMS
-        num_groups_in_drop_band = self.config.nppc_model_configuration.audio_pc_wrapper_configuration.multi_direction_config.num_groups_in_drop_band
+        # get CRMS
+        num_groups_in_drop_band = self.config.nppc_model_configuration.audio_pc_wrapper_configuration.multi_direction_configuration.num_groups_in_drop_band
 
         gt_crm_flat, pred_crm, pred_crm_flat = self._get_true_and_pred_crm(B, clean_complex, model, noisy_complex,
                                                                            num_groups_in_drop_band)
