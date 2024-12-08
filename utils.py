@@ -1,10 +1,9 @@
 # Import necessary libraries for audio processing
 import torchaudio
 import torch
-from typing import Union
+from typing import Union,Tuple
 from pathlib import Path
 
-from numba import Tuple
 
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
 import pydantic

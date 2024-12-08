@@ -97,8 +97,13 @@ class NPPCModel(nn.Module):
 
         # Get enhanced STFT components using CRM
         enhanced_mag, enhanced_real, enhanced_imag = utils.crm_to_stft_components(
-            pred_crm, noisy_complex
+            pred_crm, noisy_real , noisy_imag
         )
+        # add the channel dim back,[B,F,T] -> [B,1,F,T]
+        enhanced_mag = enhanced_mag.unsqueeze(1)
+        enhanced_real = enhanced_real.unsqueeze(1)
+        enhanced_imag = enhanced_imag.unsqueeze(1)
+
 
         # Get principal component directions from PC wrapper
         w_mat = self.audio_pc_wrapper(
