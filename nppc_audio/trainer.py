@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import pydantic
+import os
 from nppc_audio.nppc_model import NPPCModelConfig, NPPCModel
 # from nppc_model import NPPCModelConfig
 from use_pre_trained_model.model_validator.config.schema import DataConfig, DataLoaderConfig
@@ -63,16 +64,19 @@ class NPPCAudioTrainer(nn.Module):
             **config.optimizer_configuration.args
         )
 
-    def train(self, n_steps=None, n_epochs=None):
+    def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints"):
         """
         Main training loop using LoopLoader
 
         Args:
+            checkpoint_dir:
             n_steps: Number of training steps (optional)
             n_epochs: Number of training epochs (optional)
 
         Note: Must provide either n_steps or n_epochs
         """
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
         # Create loop loader
         loop_loader = LoopLoader(
             dataloader=self.dataloader,
@@ -98,7 +102,18 @@ class NPPCAudioTrainer(nn.Module):
             # Update progress bar
             pbar.set_description(f'Loss: {objective.item():.4f}')
 
+            # Save checkpoint periodically
+            if self.step % self.config.save_interval == 0:
+                checkpoint_path = os.path.join(
+                    checkpoint_dir,
+                    f"checkpoint_step_{self.step}.pt"
+                )
+                self.save_checkpoint(checkpoint_path)
+
             self.step += 1
+        # Save final checkpoint
+        final_checkpoint_path = os.path.join(checkpoint_dir, "checkpoint_final.pt")
+        self.save_checkpoint(final_checkpoint_path)
 
     def base_step(self, batch):
         """
@@ -167,6 +182,25 @@ class NPPCAudioTrainer(nn.Module):
         }
 
         return objective, log
+
+    def save_checkpoint(self, checkpoint_path):
+        """
+        Save model checkpoint including model state, optimizer state, and training info
+
+        Args:
+            checkpoint_path: Path to save checkpoint
+        """
+        checkpoint = {
+            'model_state_dict': self.nppc_model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'config': self.config,
+            'step': self.step,
+        }
+
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+        torch.save(checkpoint, checkpoint_path)
+        print(f"Checkpoint saved to {checkpoint_path}")
 
     def _calculate_final_objective(self, reconst_err, second_moment_mse):
         second_moment_loss_lambda = -1 + 2 * self.step / self.config.second_moment_loss_grace
