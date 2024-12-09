@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.optim as optim
 import pydantic
 from nppc_audio.nppc_model import NPPCModelConfig, NPPCModel
 # from nppc_model import NPPCModelConfig
@@ -11,11 +12,17 @@ from tqdm.auto import tqdm
 from nppc.auxil import LoopLoader
 
 
+class OptimizerConfig(pydantic.BaseModel):
+    type: str
+    args: dict
+
+
 class NPPCAudioTrainerConfig(pydantic.BaseModel):
     """Configuration for NPPCAudio trainer"""
     nppc_model_configuration: NPPCModelConfig
     data_configuration: DataConfig
     data_loader_configuration: DataLoaderConfig
+    optimizer_configuration: OptimizerConfig
     # output_dir: str
     learning_rate: float = 1e-4
     device: str = "cuda"
@@ -49,6 +56,13 @@ class NPPCAudioTrainer(nn.Module):
         self.dataloader = dataloader
         self.step = 0
 
+        # Initialize optimizer
+        optimizer_class = getattr(optim, config.optimizer_configuration.type)
+        self.optimizer = optimizer_class(
+            self.model.parameters(),
+            **config.optimizer_configuration.args
+        )
+
     def train(self, n_steps=None, n_epochs=None):
         """
         Main training loop using LoopLoader
@@ -74,11 +88,13 @@ class NPPCAudioTrainer(nn.Module):
                 batch = tuple(x.to(self.device) for x in batch)
             else:
                 batch = batch.to(self.device)
+            self.optimizer.zero_grad()
+
 
             # Forward and backward pass
             objective, _ = self.base_step(batch)
 
-            self.optimizer.zero_grad()
+            #self.optimizer.zero_grad()
             objective.backward()
             self.optimizer.step()
 
