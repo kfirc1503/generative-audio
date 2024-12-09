@@ -88,13 +88,10 @@ class NPPCAudioTrainer(nn.Module):
                 batch = tuple(x.to(self.device) for x in batch)
             else:
                 batch = batch.to(self.device)
-            self.optimizer.zero_grad()
-
 
             # Forward and backward pass
             objective, _ = self.base_step(batch)
-
-            #self.optimizer.zero_grad()
+            self.optimizer.zero_grad()
             objective.backward()
             self.optimizer.step()
 
