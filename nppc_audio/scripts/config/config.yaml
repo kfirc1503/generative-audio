@@ -1,5 +1,5 @@
 
-n_steps: 10
+n_steps: 100
 nppc_audio_trainer_configuration:
   device: "cpu"
   nppc_model_configuration:
@@ -50,13 +50,14 @@ nppc_audio_trainer_configuration:
     dataset:
       clean_path: "../../FullSubNet_plus/data/clean"
       noisy_path: "../../FullSubNet_plus/data/noisy"
-      sub_sample_length_seconds: 3
-      target_dB_FS_floating_value: 0
+      sub_sample_length_seconds: 3.072
+      target_dB_FS_floating_value: 10
+      snr_range: [20,20]
 
 
   data_loader_configuration:
-    batch_size: 4
-    num_workers: 0
+    batch_size: 8
+    num_workers: 4
     pin_memory: false
     shuffle: false
 

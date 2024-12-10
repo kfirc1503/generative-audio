@@ -11,6 +11,7 @@ from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_complex_ideal_ratio_mask
 from tqdm.auto import tqdm
 from nppc.auxil import LoopLoader
+from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 
 
 class OptimizerConfig(pydantic.BaseModel):
@@ -60,7 +61,7 @@ class NPPCAudioTrainer(nn.Module):
         # Initialize optimizer
         optimizer_class = getattr(optim, config.optimizer_configuration.type)
         self.optimizer = optimizer_class(
-            self.model.parameters(),
+            self.nppc_model.parameters(),
             **config.optimizer_configuration.args
         )
 
@@ -94,13 +95,18 @@ class NPPCAudioTrainer(nn.Module):
                 batch = batch.to(self.device)
 
             # Forward and backward pass
-            objective, _ = self.base_step(batch)
+            objective, log_dict = self.base_step(batch)
             self.optimizer.zero_grad()
             objective.backward()
             self.optimizer.step()
 
             # Update progress bar
             pbar.set_description(f'Loss: {objective.item():.4f}')
+            # Use raw values from log_dict
+            pbar.set_description(
+                f'Objective: {objective.item():.4f} | '
+                f'Second Moment MSE: {log_dict["second_moment_mse"].mean().item():.4f}'
+            )
 
             # Save checkpoint periodically
             if self.step % self.config.save_interval == 0:
@@ -223,10 +229,12 @@ class NPPCAudioTrainer(nn.Module):
                                    return_complex=True)
 
         gt_crm = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
+        tmp = gt_crm
         gt_crm = drop_band(
             gt_crm.permute(0, 3, 1, 2),  # [B, 2, F ,T]
             num_groups_in_drop_band
         )
+        #gt_crm = decompress_cIRM(gt_crm)
         # not sure if necessary to turn it back to [B,F,T,2]
         # gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
         # Get enhanced CRM from model's prediction

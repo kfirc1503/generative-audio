@@ -91,7 +91,8 @@ class NPPCModel(nn.Module):
         noisy_complex = torch.complex(noisy_mag, noisy_real)
 
         # Get CRM from pretrained model
-        pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
+        with torch.no_grad():
+            pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
         pred_crm = pred_crm.permute(0, 2, 3, 1)
         pred_crm = decompress_cIRM(pred_crm)
 
@@ -124,9 +125,10 @@ class NPPCModel(nn.Module):
         noisy_complex = torch.complex(noisy_mag, noisy_real)
 
         # Get CRM from pretrained model
-        pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
+        with torch.no_grad():
+            pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
         #pred_crm = pred_crm.permute(0, 2, 3, 1)
-        pred_crm = decompress_cIRM(pred_crm)
+        #pred_crm = decompress_cIRM(pred_crm)
         return pred_crm
 
 

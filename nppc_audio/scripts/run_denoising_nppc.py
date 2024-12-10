@@ -1,9 +1,15 @@
 import hydra
 from omegaconf import DictConfig
 
-from utils import get_device
+# import sys
+# import os
+#
+# # Add the parent directory of nppc_audio to the Python path
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from nppc_audio.trainer import NPPCAudioTrainer , NPPCAudioTrainerConfig
 from config.schema import Config
+from utils import get_device
 
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
