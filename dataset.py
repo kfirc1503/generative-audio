@@ -84,7 +84,7 @@ class AudioDataset(Dataset):
 
         # Resample if necessary
         if sr != self.config.sample_rate:
-            resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=self.sample_rate)
+            resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=self.config.sample_rate)
             waveform = resampler(waveform)
 
         return waveform
