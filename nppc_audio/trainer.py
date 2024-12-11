@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.optim as optim
 import pydantic
 import os
+from datetime import datetime
+import json
 from nppc_audio.nppc_model import NPPCModelConfig, NPPCModel
 # from nppc_model import NPPCModelConfig
 from use_pre_trained_model.model_validator.config.schema import DataConfig, DataLoaderConfig
@@ -117,9 +119,40 @@ class NPPCAudioTrainer(nn.Module):
                 self.save_checkpoint(checkpoint_path)
 
             self.step += 1
-        # Save final checkpoint
-        final_checkpoint_path = os.path.join(checkpoint_dir, "checkpoint_final.pt")
+
+        # Save final checkpoint with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_checkpoint_path = os.path.join(
+            checkpoint_dir,
+            f"checkpoint_final_{timestamp}.pt"
+        )
+
+        self._get_and_save_metrics(checkpoint_dir, log_dict, n_epochs, n_steps, timestamp)
+
         self.save_checkpoint(final_checkpoint_path)
+
+    def _get_and_save_metrics(self, checkpoint_dir, log_dict, n_epochs, n_steps, timestamp):
+        # Prepare metrics
+        final_metrics = {
+            'timestamp': timestamp,
+            'total_steps': self.step,
+            'final_loss': log_dict['objective'].item(),
+            'final_second_moment_mse': log_dict['second_moment_mse'].mean().item(),
+            'training_config': {
+                'n_steps': n_steps,
+                'n_epochs': n_epochs,
+                # Add any other relevant configuration
+                'learning_rate': self.config.learning_rate,
+                'device': self.config.device,
+            }
+        }
+        # Save metrics to JSON
+        metrics_path = os.path.join(
+            checkpoint_dir,
+            f"metrics_final_{timestamp}.json"
+        )
+        with open(metrics_path, 'w') as f:
+            json.dump(final_metrics, f, indent=4)
 
     def base_step(self, batch):
         """
