@@ -110,14 +110,14 @@ class NPPCAudioTrainer(nn.Module):
                 f'Second Moment MSE: {log_dict["second_moment_mse"].mean().item():.4f}'
             )
 
-            # Save checkpoint periodically
-            if self.step % self.config.save_interval == 0:
-                checkpoint_path = os.path.join(
-                    checkpoint_dir,
-                    f"checkpoint_step_{self.step}.pt"
-                )
-                self.save_checkpoint(checkpoint_path)
-
+            # # Save checkpoint periodically
+            # if self.step % self.config.save_interval == 0:
+            #     checkpoint_path = os.path.join(
+            #         checkpoint_dir,
+            #         f"checkpoint_step_{self.step}.pt"
+            #     )
+            #     self.save_checkpoint(checkpoint_path)
+            #
             self.step += 1
 
         # Save final checkpoint with timestamp
@@ -144,6 +144,7 @@ class NPPCAudioTrainer(nn.Module):
                 # Add any other relevant configuration
                 'learning_rate': self.config.learning_rate,
                 'device': self.config.device,
+                'snr_range': list(self.config.data_configuration.dataset.snr_range) # convert Tuple to List
             }
         }
         # Save metrics to JSON

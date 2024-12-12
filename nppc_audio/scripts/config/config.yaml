@@ -40,7 +40,7 @@ nppc_audio_trainer_configuration:
         sb_model_hidden_size: 384
         weight_init: false
         norm_type: "offline_laplace_norm"
-        num_groups_in_drop_band: 1
+        num_groups_in_drop_band: 2
         kersize: [ 3, 5, 10 ]
         subband_num: 1
 
@@ -50,16 +50,16 @@ nppc_audio_trainer_configuration:
     dataset:
       clean_path: "../../FullSubNet_plus/data/clean"
       noisy_path: "../../FullSubNet_plus/data/noisy"
-      sub_sample_length_seconds: 3.072
+      sub_sample_length_seconds: 5
       target_dB_FS_floating_value: 10
-      snr_range: [20,20]
+      snr_range: [-5,20]
 
 
   data_loader_configuration:
-    batch_size: 16
-    num_workers: 2
+    batch_size: 24
+    num_workers: 4
     pin_memory: false
-    shuffle: false
+    shuffle: true
 
   optimizer_configuration:
     type: "Adam"  # Can be "Adam", "SGD", etc.
