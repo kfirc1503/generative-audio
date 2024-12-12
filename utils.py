@@ -1,15 +1,17 @@
 # Import necessary libraries for audio processing
 import torchaudio
 import torch
-from typing import Union
+from typing import Union,Tuple
 from pathlib import Path
+
+
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
 import pydantic
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 
 
 class StftConfig(pydantic.BaseModel):
-    n_fft: int = 512
+    nfft: int = 512
     hop_length: int = 256
     win_length: int = 512
 
@@ -17,9 +19,9 @@ class StftConfig(pydantic.BaseModel):
 class AudioConfig(pydantic.BaseModel):
     sr: int = 16000
     stft_configuration: StftConfig
-    
 
-def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags , orig_length):
+
+def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_length):
     """
     Convert model outputs back to waveforms.
 
@@ -33,14 +35,10 @@ def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags , orig_l
 
     # Decompress the complex ideal ratio mask
     enhanced_masks = decompress_cIRM(enhanced_masks)
-
-    # Remove channel dimension from noisy components
     noisy_reals = noisy_reals.squeeze(1)
     noisy_imags = noisy_imags.squeeze(1)
-
-    # Apply mask using the complex multiplication formula
-    enhanced_reals = enhanced_masks[..., 0] * noisy_reals - enhanced_masks[..., 1] * noisy_imags
-    enhanced_imags = enhanced_masks[..., 1] * noisy_reals + enhanced_masks[..., 0] * noisy_imags
+    # Remove channel dimension from noisy components
+    enhanced_imags, enhanced_reals = noisy_to_enhanced(enhanced_masks, noisy_imags, noisy_reals)
 
     # Create complex tensor
     enhanced_complex = torch.complex(enhanced_reals, enhanced_imags)
@@ -60,7 +58,15 @@ def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags , orig_l
 
     return enhanced_waveforms
 
-def preload_model(model_path:Union[Path,str], model: FullSubNet_Plus) -> FullSubNet_Plus:
+
+def noisy_to_enhanced(enhanced_masks, noisy_imags, noisy_reals):
+    # Apply mask using the complex multiplication formula
+    enhanced_reals = enhanced_masks[..., 0] * noisy_reals - enhanced_masks[..., 1] * noisy_imags
+    enhanced_imags = enhanced_masks[..., 1] * noisy_reals + enhanced_masks[..., 0] * noisy_imags
+    return enhanced_imags, enhanced_reals
+
+
+def preload_model(model_path: Union[Path, str], model: FullSubNet_Plus) -> FullSubNet_Plus:
     """
     Preload model parameters (in "*.tar" format) at the start of experiment.
 
@@ -68,9 +74,9 @@ def preload_model(model_path:Union[Path,str], model: FullSubNet_Plus) -> FullSub
         model_path (Path): The file path of the *.tar file
     """
     if type(model_path) == str:
-        #turn him to path
+        # turn him to path
         model_path = Path(model_path)
-        #absolute_path = model_path.resolve()
+        # absolute_path = model_path.resolve()
     model_path = model_path.expanduser().absolute()
     assert model_path.exists(), f"The file {model_path.as_posix()} is not exist. please check path."
 
@@ -79,13 +85,13 @@ def preload_model(model_path:Union[Path,str], model: FullSubNet_Plus) -> FullSub
     return model
 
 
-def load_pretrained_model(model_path:Union[Path,str], model_config: FullSubNetPlusConfig) -> FullSubNet_Plus:
+def load_pretrained_model(model_path: Union[Path, str], model_config: FullSubNetPlusConfig) -> FullSubNet_Plus:
     model = FullSubNet_Plus(model_config)
     model = preload_model(model_path, model)
     return model
 
 
-def prepare_input_from_waveform(waveform , n_fft: int, hop_length: int, win_length: int , device: str) -> tuple:
+def prepare_input_from_waveform(waveform, n_fft: int, hop_length: int, win_length: int, device: torch.device) -> tuple:
     """
     Prepare input for FullSubNet_Plus model from a waveform tensor.
 
@@ -111,7 +117,7 @@ def prepare_input_from_waveform(waveform , n_fft: int, hop_length: int, win_leng
         hop_length=hop_length,  # 50% overlap
         win_length=win_length,
         window=window,
-        center = True,
+        center=True,
         return_complex=True
     )
 
@@ -170,6 +176,7 @@ def prepare_input(audio_path: str | Path):
 
     return noisy_mag, noisy_real, noisy_imag
 
+
 # Example usage:
 # pre_train_model.eval()  # Set model to evaluation mode
 # with torch.no_grad():
@@ -188,3 +195,14 @@ def get_device(device_preference='cuda'):
     if device_preference == 'cuda' and torch.cuda.is_available():
         return torch.device('cuda')
     return torch.device('cpu')
+
+
+def crm_to_stft_components(crm: torch.Tensor, noisy_real: torch.Tensor, noisy_imag: torch.Tensor) -> tuple[
+    torch.Tensor, torch.Tensor, torch.Tensor]:
+    # Remove channel dimension from noisy components
+    noisy_real = noisy_real.squeeze(1)
+    noisy_imag = noisy_imag.squeeze(1)
+    enhanced_real, enhanced_imag = noisy_to_enhanced(crm,noisy_real, noisy_imag)
+
+    enhanced_mag = torch.sqrt(enhanced_real ** 2 + enhanced_imag ** 2)
+    return enhanced_mag, enhanced_real, enhanced_imag

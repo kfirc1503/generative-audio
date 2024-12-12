@@ -11,6 +11,9 @@ import utils
 
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 import scipy.signal as signal
+from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import mag_phase, drop_band
+from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_complex_ideal_ratio_mask, decompress_cIRM, \
+    build_ideal_ratio_mask
 
 
 class ModelValidatorConfig(pydantic.BaseModel):
@@ -44,7 +47,7 @@ class ModelValidator:
             # Narrow-band PESQ (8kHz)
             if sr != 8000:
                 # Downsample to 8000 Hz for NB-PESQ
-                #TODO : need to do this generic, there is assumption here of sr=16000
+                # TODO : need to do this generic, there is assumption here of sr=16000
                 nb_clean = signal.resample_poly(clean, up=1, down=2)  # 16000 -> 8000
                 nb_enhanced = signal.resample_poly(enhanced, up=1, down=2)
             else:
@@ -78,7 +81,7 @@ class ModelValidator:
 
         return metrics
 
-    def enhance_audio(self, noisy: torch.Tensor) -> np.ndarray:
+    def enhance_audio(self, noisy: torch.Tensor, clean: torch.Tensor) -> np.ndarray:
         """Enhance a single audio sample"""
         with torch.no_grad():
             noisy = noisy.to(self.device).unsqueeze(0)
@@ -87,20 +90,30 @@ class ModelValidator:
             window = torch.hann_window(self.config.audio_config.stft_configuration.win_length).to(self.device)
             noisy_complex = torch.stft(
                 noisy,
-                n_fft=self.config.audio_config.stft_configuration.n_fft,
+                n_fft=self.config.audio_config.stft_configuration.nfft,
                 hop_length=self.config.audio_config.stft_configuration.hop_length,
                 win_length=self.config.audio_config.stft_configuration.win_length,
                 window=window,
                 return_complex=True
             )
-
+            clean_complex = torch.stft(
+                clean,
+                n_fft=self.config.audio_config.stft_configuration.nfft,
+                hop_length=self.config.audio_config.stft_configuration.hop_length,
+                win_length=self.config.audio_config.stft_configuration.win_length,
+                window=window,
+                return_complex=True
+            )
             noisy_mag = noisy_complex.abs().unsqueeze(1)
             noisy_real = noisy_complex.real.unsqueeze(1)
             noisy_imag = noisy_complex.imag.unsqueeze(1)
 
             pred_crm = self.model(noisy_mag, noisy_real, noisy_imag)
             pred_crm = pred_crm.permute(0, 2, 3, 1)
-            # dont know if necessary yet
+
+            err_norm = self.calculate_error_norm(pred_crm, noisy_complex, clean_complex)
+
+            # dont know if necessary yet (it is)
             pred_crm = decompress_cIRM(pred_crm)
 
             # Apply mask and reconstruct
@@ -110,7 +123,7 @@ class ModelValidator:
 
             enhanced = torch.istft(
                 enhanced_complex,
-                n_fft=self.config.audio_config.stft_configuration.n_fft,
+                n_fft=self.config.audio_config.stft_configuration.nfft,
                 hop_length=self.config.audio_config.stft_configuration.hop_length,
                 win_length=self.config.audio_config.stft_configuration.win_length,
                 window=window,
@@ -134,7 +147,7 @@ class ModelValidator:
             # Process each item in batch
             for i in range(batch_size):
                 # Enhance audio
-                enhanced = self.enhance_audio(noisy[i])
+                enhanced = self.enhance_audio(noisy[i], clean[i])
                 clean_np = clean[i].cpu().numpy()
                 # Calculate metrics
                 metrics = self.calculate_metrics(
@@ -161,3 +174,16 @@ class ModelValidator:
         """Save metrics to a JSON file"""
         with open(save_path, 'w') as f:
             json.dump(metrics, f, indent=4)
+
+    def calculate_error_norm(self, pred_crm, noisy_complex, clean_complex):
+
+        # first create the gt crm:
+        ground_truth_cIRM = build_complex_ideal_ratio_mask(noisy_complex, clean_complex)  # [B, F, T, 2]
+        pred_crm = pred_crm.permute(0, 2, 3, 1)
+        ground_truth_cIRM = ground_truth_cIRM.permute(0, 2, 3, 1)
+        B = noisy_complex.size(0)
+        pred_crm_flat = pred_crm.reshape(B, 2, -1)  # [B, 2, F*T]
+        gt_crm_flat = ground_truth_cIRM.reshape(B, 2, -1)  # [B,2,F*T]
+        err = pred_crm_flat - gt_crm_flat
+        err_norm = torch.norm(err, dim=(1, 2))  # [B]
+        return err_norm
