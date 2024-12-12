@@ -50,7 +50,7 @@ nppc_audio_trainer_configuration:
     dataset:
       clean_path: "../../FullSubNet_plus/data/clean"
       noisy_path: "../../FullSubNet_plus/data/noisy"
-      sub_sample_length_seconds: 8
+      sub_sample_length_seconds: 7
       target_dB_FS_floating_value: 10
       snr_range: [-5,20]
 
