@@ -1427,4 +1427,6 @@ FullSubNet_plus/.idea
 .idea/
 FullSubNet_plus/data
 use_pre_trained_model/outputs
+nppc_audio/scripts/checkpoints
+nppc_audio/scripts/outputs
 #./FullSubNet_plus/.idea

@@ -78,10 +78,10 @@ class Attention(nn.Module):
         x = x.unflatten(1, (3, self.heads, -1))
         q, k, v = x[:, 0], x[:, 1], x[:, 2]
 
-        attn = torch.einsum(f"bhki,bhka->bhia", q, k)
+        attn = torch.einsum("bhki,bhka->bhia", q, k)
         attn = attn * attn.shape[1] ** -0.5
         attn = attn.softmax(dim=-1)
-        x = torch.einsum(f"bhia,bhda->bhdi", attn, v)
+        x = torch.einsum("bhia,bhda->bhdi", attn, v)
 
         x = x.flatten(1, 2)
         x = self.conv_out(x)

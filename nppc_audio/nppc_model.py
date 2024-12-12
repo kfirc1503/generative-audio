@@ -1,12 +1,10 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Optional , Literal
-import numpy as np
+from typing import Literal
 import pydantic
-from networks import MultiDirectionFullSubNet_Plus , MultiDirectionConfig
-from pc_wrapper import AudioPCWrapper , AudioPCWrapperConfig
-from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig,FullSubNet_Plus
+from nppc_audio.pc_wrapper import AudioPCWrapper,AudioPCWrapperConfig
+#from pc_wrapper import AudioPCWrapper , AudioPCWrapperConfig
+from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig
 import utils
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 
@@ -52,8 +50,8 @@ class NPPCModel(nn.Module):
         self.pretrained_restoration_model.eval()
 
         # same lines!!
-        # self.audio_pc_wrapper = AudioPCWrapper(config.audio_pc_wrapper_configuration)
-        self.audio_pc_wrapper = self.config.audio_pc_wrapper_configuration.make_instance()
+        self.audio_pc_wrapper = AudioPCWrapper(config.audio_pc_wrapper_configuration)
+        #self.audio_pc_wrapper = self.config.audio_pc_wrapper_configuration.make_instance()
         self.audio_pc_wrapper.to(self.device)
 
 
@@ -93,14 +91,20 @@ class NPPCModel(nn.Module):
         noisy_complex = torch.complex(noisy_mag, noisy_real)
 
         # Get CRM from pretrained model
-        pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
+        with torch.no_grad():
+            pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
         pred_crm = pred_crm.permute(0, 2, 3, 1)
         pred_crm = decompress_cIRM(pred_crm)
 
         # Get enhanced STFT components using CRM
         enhanced_mag, enhanced_real, enhanced_imag = utils.crm_to_stft_components(
-            pred_crm, noisy_complex
+            pred_crm, noisy_real , noisy_imag
         )
+        # add the channel dim back,[B,F,T] -> [B,1,F,T]
+        enhanced_mag = enhanced_mag.unsqueeze(1)
+        enhanced_real = enhanced_real.unsqueeze(1)
+        enhanced_imag = enhanced_imag.unsqueeze(1)
+
 
         # Get principal component directions from PC wrapper
         w_mat = self.audio_pc_wrapper(
@@ -121,9 +125,10 @@ class NPPCModel(nn.Module):
         noisy_complex = torch.complex(noisy_mag, noisy_real)
 
         # Get CRM from pretrained model
-        pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
-        pred_crm = pred_crm.permute(0, 2, 3, 1)
-        pred_crm = decompress_cIRM(pred_crm)
+        with torch.no_grad():
+            pred_crm = self.pretrained_restoration_model(noisy_mag, noisy_real, noisy_imag)
+        #pred_crm = pred_crm.permute(0, 2, 3, 1)
+        #pred_crm = decompress_cIRM(pred_crm)
         return pred_crm
 
 

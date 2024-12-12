@@ -1,0 +1,70 @@
+
+n_steps: 1000
+nppc_audio_trainer_configuration:
+  device: "cuda"
+  nppc_model_configuration:
+    device: "cuda"
+    stft_configuration:
+      nfft: 512
+      win_length: 512
+      hop_length: 256
+    pretrained_restoration_model_path: "../../FullSubNet_plus/best_model.tar"
+    pretrained_restoration_model_configuration:
+      sb_num_neighbors: 15
+      fb_num_neighbors: 0
+      num_freqs: 257
+      look_ahead: 2
+      sequence_model: "LSTM"
+      fb_output_activate_function: "ReLU"
+      sb_output_activate_function: false
+      channel_attention_model: "TSSE"
+      fb_model_hidden_size: 512
+      sb_model_hidden_size: 384
+      weight_init: false
+      norm_type: "offline_laplace_norm"
+      num_groups_in_drop_band: 1
+      kersize: [ 3, 5, 10 ]
+      subband_num: 1
+    audio_pc_wrapper_configuration:
+      multi_direction_configuration:
+        n_directions: 5
+        sb_num_neighbors: 15
+        fb_num_neighbors: 0
+        num_freqs: 257
+        look_ahead: 2
+        sequence_model: "LSTM"
+        fb_output_activate_function: "ReLU"
+        sb_output_activate_function: false
+        channel_attention_model: "TSSE"
+        fb_model_hidden_size: 512
+        sb_model_hidden_size: 384
+        weight_init: false
+        norm_type: "offline_laplace_norm"
+        num_groups_in_drop_band: 2
+        kersize: [ 3, 5, 10 ]
+        subband_num: 1
+
+  data_configuration:
+    #data_not necessary, deprecate in the future
+    data_path: "C:/Kfir/repos/generative-audio/FullSubNet_plus/data/clean"
+    dataset:
+      clean_path: "../../FullSubNet_plus/data/clean"
+      noisy_path: "../../FullSubNet_plus/data/noisy"
+      sub_sample_length_seconds: 5
+      target_dB_FS_floating_value: 10
+      snr_range: [-5,20]
+
+
+  data_loader_configuration:
+    batch_size: 24
+    num_workers: 4
+    pin_memory: false
+    shuffle: true
+
+  optimizer_configuration:
+    type: "Adam"  # Can be "Adam", "SGD", etc.
+    args:
+      lr: 0.0001
+      betas: [ 0.9, 0.999 ]
+      eps: 1e-8
+      weight_decay: 0

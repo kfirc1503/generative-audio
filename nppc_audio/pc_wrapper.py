@@ -1,11 +1,8 @@
 import pydantic
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from typing import Optional
-import numpy as np
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
-from nppc_audio.networks import MultiDirectionConfig
+from nppc_audio.networks import MultiDirectionConfig , MultiDirectionFullSubNet_Plus
 
 
 def gram_schmidt_to_crm(x: torch.Tensor) -> torch.Tensor:
@@ -47,7 +44,7 @@ def gram_schmidt_to_crm(x: torch.Tensor) -> torch.Tensor:
     return torch.stack([out.real, out.imag], dim=2)
 
 class AudioPCWrapperConfig(pydantic.BaseModel):
-    multi_direction_config:MultiDirectionConfig
+    multi_direction_configuration:MultiDirectionConfig
 
     def make_instance(self):
         # Create and return an instance of Model using this config
@@ -66,7 +63,8 @@ class AudioPCWrapper(nn.Module):
             net: MultiDirectionFullSubNet_Plus network
         """
         super().__init__()
-        self.net = audio_pc_wrapper_config.multi_direction_config.make_instance()
+        #self.net = audio_pc_wrapper_config.multi_direction_configuration.make_instance()
+        self.net = MultiDirectionFullSubNet_Plus(audio_pc_wrapper_config.multi_direction_configuration)
         self.n_dirs = self.net.n_directions
 
     def forward(self, noisy_mag, noisy_real, noisy_imag,
@@ -89,14 +87,14 @@ class AudioPCWrapper(nn.Module):
         crm = self.net(noisy_mag, noisy_real, noisy_imag,
                        enhanced_mag, enhanced_real, enhanced_imag)
 
-        # Permute to match FullSubNet+ format [B, F, T, 2*n_dirs]
-        crm = crm.permute(0, 2, 3, 1)
-
-        # Decompress CRM
-        crm = decompress_cIRM(crm)
-
-        # Permute back to our working format [B, 2*n_dirs, F, T]
-        crm = crm.permute(0, 3, 1, 2)
+        # # Permute to match FullSubNet+ format [B, F, T, 2*n_dirs]
+        # crm = crm.permute(0, 2, 3, 1)
+        #
+        # # Decompress CRM
+        # crm = decompress_cIRM(crm)
+        #
+        # # Permute back to our working format [B, 2*n_dirs, F, T]
+        # crm = crm.permute(0, 3, 1, 2)
 
         # Reshape to separate directions and real/imag components
         batch_size, _, freq_bins, time_steps = crm.shape

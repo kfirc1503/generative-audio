@@ -1,15 +1,17 @@
 # Import necessary libraries for audio processing
 import torchaudio
 import torch
-from typing import Union
+from typing import Union,Tuple
 from pathlib import Path
+
+
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
 import pydantic
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 
 
 class StftConfig(pydantic.BaseModel):
-    n_fft: int = 512
+    nfft: int = 512
     hop_length: int = 256
     win_length: int = 512
 
@@ -33,14 +35,10 @@ def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_le
 
     # Decompress the complex ideal ratio mask
     enhanced_masks = decompress_cIRM(enhanced_masks)
-
-    # Remove channel dimension from noisy components
     noisy_reals = noisy_reals.squeeze(1)
     noisy_imags = noisy_imags.squeeze(1)
-
-    # Apply mask using the complex multiplication formula
-    enhanced_reals = enhanced_masks[..., 0] * noisy_reals - enhanced_masks[..., 1] * noisy_imags
-    enhanced_imags = enhanced_masks[..., 1] * noisy_reals + enhanced_masks[..., 0] * noisy_imags
+    # Remove channel dimension from noisy components
+    enhanced_imags, enhanced_reals = noisy_to_enhanced(enhanced_masks, noisy_imags, noisy_reals)
 
     # Create complex tensor
     enhanced_complex = torch.complex(enhanced_reals, enhanced_imags)
@@ -59,6 +57,13 @@ def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_le
     )
 
     return enhanced_waveforms
+
+
+def noisy_to_enhanced(enhanced_masks, noisy_imags, noisy_reals):
+    # Apply mask using the complex multiplication formula
+    enhanced_reals = enhanced_masks[..., 0] * noisy_reals - enhanced_masks[..., 1] * noisy_imags
+    enhanced_imags = enhanced_masks[..., 1] * noisy_reals + enhanced_masks[..., 0] * noisy_imags
+    return enhanced_imags, enhanced_reals
 
 
 def preload_model(model_path: Union[Path, str], model: FullSubNet_Plus) -> FullSubNet_Plus:
@@ -192,19 +197,12 @@ def get_device(device_preference='cuda'):
     return torch.device('cpu')
 
 
-def crm_to_stft_components(crm: torch.Tensor, noisy_complex: torch.Tensor):
-    enhanced_real = crm[..., 0] * noisy_complex.real - crm[..., 1] * noisy_complex.imag
-    enhanced_imag = crm[..., 1] * noisy_complex.real + crm[..., 0] * noisy_complex.imag
-    enhanced_complex = torch.complex(enhanced_real, enhanced_imag)
+def crm_to_stft_components(crm: torch.Tensor, noisy_real: torch.Tensor, noisy_imag: torch.Tensor) -> tuple[
+    torch.Tensor, torch.Tensor, torch.Tensor]:
+    # Remove channel dimension from noisy components
+    noisy_real = noisy_real.squeeze(1)
+    noisy_imag = noisy_imag.squeeze(1)
+    enhanced_real, enhanced_imag = noisy_to_enhanced(crm,noisy_real, noisy_imag)
 
-    # Get components needed by the model
-    noisy_real = enhanced_complex.real
-    noisy_imag = enhanced_complex.imag
-    noisy_mag = torch.sqrt(noisy_real ** 2 + noisy_imag ** 2)
-
-    # Add batch and channel dimensions [B, 1, F, T]
-    noisy_mag = noisy_mag.unsqueeze(0)
-    noisy_real = noisy_real.unsqueeze(0)
-    noisy_imag = noisy_imag.unsqueeze(0)
-
-    return noisy_mag, noisy_real, noisy_imag
+    enhanced_mag = torch.sqrt(enhanced_real ** 2 + enhanced_imag ** 2)
+    return enhanced_mag, enhanced_real, enhanced_imag
