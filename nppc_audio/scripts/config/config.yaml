@@ -50,13 +50,13 @@ nppc_audio_trainer_configuration:
     dataset:
       clean_path: "../../FullSubNet_plus/data/clean"
       noisy_path: "../../FullSubNet_plus/data/noisy"
-      sub_sample_length_seconds: 5
+      sub_sample_length_seconds: 8
       target_dB_FS_floating_value: 10
       snr_range: [-5,20]
 
 
   data_loader_configuration:
-    batch_size: 24
+    batch_size: 16
     num_workers: 4
     pin_memory: false
     shuffle: true

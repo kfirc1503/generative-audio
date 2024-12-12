@@ -144,7 +144,9 @@ class NPPCAudioTrainer(nn.Module):
                 # Add any other relevant configuration
                 'learning_rate': self.config.learning_rate,
                 'device': self.config.device,
-                'snr_range': list(self.config.data_configuration.dataset.snr_range) # convert Tuple to List
+                'snr_range': list(self.config.data_configuration.dataset.snr_range), # convert Tuple to List
+                'sub_sample_length_seconds': self.config.data_configuration.dataset.sub_sample_length_seconds,
+                'batch_size': self.config.data_loader_configuration.batch_size
             }
         }
         # Save metrics to JSON
