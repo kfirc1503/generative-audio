@@ -206,3 +206,10 @@ def crm_to_stft_components(crm: torch.Tensor, noisy_real: torch.Tensor, noisy_im
 
     enhanced_mag = torch.sqrt(enhanced_real ** 2 + enhanced_imag ** 2)
     return enhanced_mag, enhanced_real, enhanced_imag
+
+
+def crm_to_spectogram(curr_pc_crm, noisy_complex):
+    enhanced_real = curr_pc_crm[..., 0] * noisy_complex.real - curr_pc_crm[..., 1] * noisy_complex.imag
+    enhanced_imag = curr_pc_crm[..., 1] * noisy_complex.real + curr_pc_crm[..., 0] * noisy_complex.imag
+    enhanced_complex = torch.complex(enhanced_real, enhanced_imag)
+    return enhanced_complex
