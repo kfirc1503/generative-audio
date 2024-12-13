@@ -7,8 +7,8 @@ from pathlib import Path
 import soundfile as sf
 from typing import Union, Tuple
 import pydantic
-from dataset import AudioDataSetConfig, AudioDataset
 import os
+from dataset.audio_dataset import AudioDataset,AudioDataSetConfig
 
 
 class TestSampleGeneratorConfig(pydantic.BaseModel):

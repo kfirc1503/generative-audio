@@ -5,14 +5,15 @@ from dataset.sample_generator import TestSampleGenerator, TestSampleGeneratorCon
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig) -> None:
-    print("Configuration:")
-    print(f"Clean path: {cfg.test_sample_generator.clean_path}")
-    print(f"Noisy path: {cfg.test_sample_generator.noisy_path}")
-    print(f"Output directory: {cfg.test_sample_generator.output_dir}")
-    print(f"SNR: {cfg.test_sample_generator.snr}")
-    print(f"Number of samples: {cfg.test_sample_generator.num_samples}")
     # Convert Hydra config to Pydantic model for validation
     config = TestSampleGeneratorConfig(**cfg)
+
+    print("Configuration:")
+    print(f"Clean path: {config.clean_path}")
+    print(f"Noisy path: {config.noisy_path}")
+    print(f"Output directory: {config.output_dir}")
+    print(f"SNR: {config.snr}")
+    print(f"Number of samples: {config.num_samples}")
     # # Convert Hydra config to pydantic config
     # config = TestSampleGeneratorConfig(
     #     clean_path=cfg.test_sample_generator.clean_path,

@@ -5,8 +5,8 @@
   noisy_path: "../../FullSubNet_plus/data/noisy"
   output_dir: "../../FullSubNet_plus/data/output"
   sample_rate: 16000
-  snr: 5
-  num_samples: 5
-  sample_length_seconds: 10
+  snr: -5
+  num_samples: 1
+  sample_length_seconds: 12
   target_dB_FS: -25.0
   silence_length: 0.2
