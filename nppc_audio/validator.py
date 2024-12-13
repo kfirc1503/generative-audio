@@ -72,7 +72,7 @@ class NPPCAudioValidator:
             window = torch.hann_window(stft_config.win_length).to(self.device)
 
             noisy_complex = torch.stft(
-                noisy_audio,
+                noisy,
                 stft_config.nfft,
                 hop_length=stft_config.hop_length,
                 win_length=stft_config.win_length,
