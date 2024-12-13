@@ -115,6 +115,7 @@ class NPPCAudioValidator:
         self.model.eval()
         with torch.no_grad():
             noisy = noisy_audio.to(self.device)
+            clean_audio = clean_audio.to(self.device)
 
             # Get spectrograms for each PC direction using our existing function
             pc_specs = self._crm_directions_to_spectograms(noisy)
