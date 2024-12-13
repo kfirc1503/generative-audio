@@ -6,7 +6,7 @@
   output_dir: ""
   sample_rate: 16000
   snr: 5
-  num_samples: int = 5
-  sample_length_seconds: float = 10
+  num_samples: 5
+  sample_length_seconds: 10
   target_dB_FS: -25.0
-  silence_length: float = 0.2
+  silence_length: 0.2
