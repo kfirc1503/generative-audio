@@ -1,9 +1,9 @@
 
 
 
-  clean_path: ""
-  noisy_path: ""
-  output_dir: ""
+  clean_path: "../../FullSubNet_plus/data/clean"
+  noisy_path: "../../FullSubNet_plus/data/noisy"
+  output_dir: "../../FullSubNet_plus/data/output"
   sample_rate: 16000
   snr: 5
   num_samples: 5
