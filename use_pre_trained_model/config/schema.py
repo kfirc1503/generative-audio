@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNetPlusConfig
-from dataset import AudioDataSetConfig
+from dataset.dataset import AudioDataSetConfig
 
 class AudioConfig(BaseModel):
     """Audio processing configuration"""

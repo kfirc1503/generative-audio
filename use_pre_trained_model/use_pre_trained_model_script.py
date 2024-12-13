@@ -8,7 +8,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 
 from config.schema import Config
-from dataset import AudioDataset
+from dataset.dataset import AudioDataset
 from utils import model_outputs_to_waveforms, load_pretrained_model, prepare_input_from_waveform
 
 

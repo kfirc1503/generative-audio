@@ -20,7 +20,7 @@ class NPPCAudioValidatorConfig(pydantic.BaseModel):
 
 
 class NPPCAudioValidator:
-    def __init__(self, config, metrics_path=None):
+    def __init__(self, config: NPPCAudioValidatorConfig, metrics_path=None):
         """
         Initialize validator with model checkpoint and optional metrics
 
@@ -102,7 +102,7 @@ class NPPCAudioValidator:
             return specs
 
     def visualize_pc_spectrograms(self, noisy_audio, clean_audio=None, save_dir=None):
-        #TODO : need to change this function 
+        #TODO : need to change this function
         """
         Visualize PC spectrograms along with noisy, clean, and enhanced spectrograms
         Similar to NPPC article visualization
@@ -120,18 +120,14 @@ class NPPCAudioValidator:
             pc_specs = self._crm_directions_to_spectograms(noisy)
 
             # Get STFT of noisy and clean
-            noisy_complex, stft_config, window = self.audio_to_stft(noisy_audio)
-
-            # Get enhanced audio spectrogram
-            enhanced = self.model.enhance(noisy)
-            enhanced_complex = torch.stft(
-                enhanced,
-                stft_config.nfft,
-                hop_length=stft_config.hop_length,
-                win_length=stft_config.win_length,
-                window=window,
-                return_complex=True
-            )
+            noisy_complex = self.audio_to_stft(noisy_audio)
+            # get the pred_crm :
+            pred_crm = self.model.get_pred_crm(noisy_audio) # [1,2,F,T]
+            # need to decompress the pred crm:
+            pred_crm = pred_crm.permute(0, 2, 3, 1) # [1,F,T,2]
+            pred_crm = decompress_cIRM(pred_crm)
+            # from here get the enhanced spectogram
+            enhanced_complex = utils.crm_to_spectogram(pred_crm, noisy)
 
             # Create visualization
             n_rows = 2
@@ -148,14 +144,7 @@ class NPPCAudioValidator:
 
             # Plot clean spectrogram if available
             if clean_audio is not None:
-                clean_complex = torch.stft(
-                    clean_audio,
-                    stft_config.nfft,
-                    hop_length=stft_config.hop_length,
-                    win_length=stft_config.win_length,
-                    window=window,
-                    return_complex=True
-                )
+                clean_complex = self.audio_to_stft(clean_audio)
                 plt.subplot(n_rows, n_cols, 2)
                 clean_spec_db = 20 * torch.log10(torch.abs(clean_complex) + 1e-8)
                 plt.imshow(clean_spec_db[0].cpu(), origin='lower', aspect='auto')
@@ -203,4 +192,4 @@ class NPPCAudioValidator:
             window=window,
             return_complex=True
         )
-        return input_complex, stft_config, window
+        return input_complex

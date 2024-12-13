@@ -7,7 +7,7 @@ from omegaconf import DictConfig
 import torch
 
 from use_pre_trained_model.model_validator.config.schema import Config
-from dataset import AudioDataset
+from dataset.dataset import AudioDataset
 import utils
 import os
 

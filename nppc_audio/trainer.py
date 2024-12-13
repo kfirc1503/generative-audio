@@ -8,12 +8,11 @@ import json
 from nppc_audio.nppc_model import NPPCModelConfig, NPPCModel
 # from nppc_model import NPPCModelConfig
 from use_pre_trained_model.model_validator.config.schema import DataConfig, DataLoaderConfig
-from dataset import AudioDataset
+from dataset.dataset import AudioDataset
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_complex_ideal_ratio_mask
 from tqdm.auto import tqdm
 from nppc.auxil import LoopLoader
-from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 
 
 class OptimizerConfig(pydantic.BaseModel):
