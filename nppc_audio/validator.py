@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 import pydantic
-from typing import Optional
+from typing import Optional, Literal
 from nppc_audio.nppc_model import NPPCModel, NPPCModelConfig
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 import utils
@@ -17,6 +17,7 @@ class NPPCAudioValidatorConfig(pydantic.BaseModel):
     nppc_audio_model_configuration: NPPCModelConfig
     checkpoint_path: str
     metrics_path: Optional[str] = None
+    device: Literal["cpu", "cuda"] = "cuda"
 
 
 class NPPCAudioValidator:
@@ -102,7 +103,7 @@ class NPPCAudioValidator:
             return specs
 
     def visualize_pc_spectrograms(self, noisy_audio, clean_audio=None, save_dir=None):
-        #TODO : need to change this function
+        # TODO : need to change this function
         """
         Visualize PC spectrograms along with noisy, clean, and enhanced spectrograms
         Similar to NPPC article visualization
@@ -123,9 +124,9 @@ class NPPCAudioValidator:
             # Get STFT of noisy and clean
             noisy_complex = self.audio_to_stft(noisy_audio)
             # get the pred_crm :
-            pred_crm = self.model.get_pred_crm(noisy_audio) # [1,2,F,T]
+            pred_crm = self.model.get_pred_crm(noisy_audio)  # [1,2,F,T]
             # need to decompress the pred crm:
-            pred_crm = pred_crm.permute(0, 2, 3, 1) # [1,F,T,2]
+            pred_crm = pred_crm.permute(0, 2, 3, 1)  # [1,F,T,2]
             pred_crm = decompress_cIRM(pred_crm)
             # from here get the enhanced spectogram
             enhanced_complex = utils.crm_to_spectogram(pred_crm, noisy)
