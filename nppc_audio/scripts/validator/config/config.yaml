@@ -1,9 +1,12 @@
 
 
-clean_wav_path: "../../../FullSubNet_plus/data/output/clean_snr_0/sample_0000_clean.wav"
-noisy_wav_path: "../../../FullSubNet_plus/data/output/noisy_snr_0/sample_0000_noisy.wav"
+clean_wav_path: "../../../FullSubNet_plus/data/output/clean_snr_-5/sample_0000_clean.wav"
+noisy_wav_path: "../../../FullSubNet_plus/data/output/noisy_snr_-5/sample_0000_noisy.wav"
+save_dir: "../../../FullSubNet_plus/data/results"
 nppc_audio_validator_configuration:
-  checkpoint_path: "../checkpoints/checkpoint_final_20241212_160930.pt"
+#  checkpoint_path: "../checkpoints/checkpoint_final_20241212_160930.pt"
+  checkpoint_path: "../checkpoints/checkpoint_final_20241214_000943.pt"
+
   nppc_audio_model_configuration:
     device: "cuda"
     stft_configuration:

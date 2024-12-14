@@ -9,6 +9,8 @@ from nppc_audio.nppc_model import NPPCModelConfig, NPPCModel
 # from nppc_model import NPPCModelConfig
 from use_pre_trained_model.model_validator.config.schema import DataConfig, DataLoaderConfig
 from dataset.audio_dataset import AudioDataset
+# from dataset import AudioDataset
+
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_complex_ideal_ratio_mask
 from tqdm.auto import tqdm
@@ -234,7 +236,6 @@ class NPPCAudioTrainer(nn.Module):
         checkpoint = {
             'model_state_dict': self.nppc_model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'config': self.config,
             'step': self.step,
         }
 

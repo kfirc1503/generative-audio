@@ -1,5 +1,5 @@
 
-n_steps: 1000
+n_steps: 10000
 nppc_audio_trainer_configuration:
   device: "cuda"
   nppc_model_configuration:
@@ -50,9 +50,9 @@ nppc_audio_trainer_configuration:
     dataset:
       clean_path: "../../FullSubNet_plus/data/clean"
       noisy_path: "../../FullSubNet_plus/data/noisy"
-      sub_sample_length_seconds: 7
+      sub_sample_length_seconds: 5
       target_dB_FS_floating_value: 10
-      snr_range: [-5,20]
+      snr_range: [-10,20]
 
 
   data_loader_configuration:
