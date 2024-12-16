@@ -1,7 +1,8 @@
 # FullSubNet_plus/config/schema.py
 
 from pydantic import BaseModel
-from dataset import AudioDataSetConfig
+from dataset.audio_dataset import AudioDataSetConfig
+
 from use_pre_trained_model.model_validator.model_validator import ModelValidatorConfig
 
 

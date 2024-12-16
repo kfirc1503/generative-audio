@@ -8,12 +8,13 @@ import json
 from nppc_audio.nppc_model import NPPCModelConfig, NPPCModel
 # from nppc_model import NPPCModelConfig
 from use_pre_trained_model.model_validator.config.schema import DataConfig, DataLoaderConfig
-from dataset import AudioDataset
+from dataset.audio_dataset import AudioDataset
+# from dataset import AudioDataset
+
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.feature import drop_band
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import build_complex_ideal_ratio_mask
 from tqdm.auto import tqdm
 from nppc.auxil import LoopLoader
-from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
 
 
 class OptimizerConfig(pydantic.BaseModel):
@@ -144,7 +145,9 @@ class NPPCAudioTrainer(nn.Module):
                 # Add any other relevant configuration
                 'learning_rate': self.config.learning_rate,
                 'device': self.config.device,
-                'snr_range': list(self.config.data_configuration.dataset.snr_range) # convert Tuple to List
+                'snr_range': list(self.config.data_configuration.dataset.snr_range), # convert Tuple to List
+                'sub_sample_length_seconds': self.config.data_configuration.dataset.sub_sample_length_seconds,
+                'batch_size': self.config.data_loader_configuration.batch_size
             }
         }
         # Save metrics to JSON
@@ -233,7 +236,6 @@ class NPPCAudioTrainer(nn.Module):
         checkpoint = {
             'model_state_dict': self.nppc_model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            'config': self.config,
             'step': self.step,
         }
 
