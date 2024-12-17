@@ -627,7 +627,7 @@ class NPPCAudioValidator:
                 error_complex = enhanced_complex - clean_complex
                 error_spec_db = 20 * torch.log10(torch.abs(error_complex) + 1e-8)
                 im = plt.imshow(error_spec_db[0].cpu(), origin='lower', aspect='auto',
-                                vmin=-60, vmax=0)
+                                vmin=-60, vmax=20)
                 plt.colorbar(im)
                 plt.title('Error (Enh - Clean)')
 
@@ -649,7 +649,7 @@ class NPPCAudioValidator:
                 # Plot base PC spectrogram
                 plt.subplot(n_rows, n_cols, row_start)
                 im = plt.imshow(mag_spec_db[0].cpu(), origin='lower', aspect='auto',
-                                vmin=-60, vmax=0)
+                                vmin=-60, vmax=20)
                 plt.colorbar(im)
                 plt.title(f'PC {pc_idx + 1}')
                 plt.ylabel(f'PC {pc_idx + 1}\nVariations')
