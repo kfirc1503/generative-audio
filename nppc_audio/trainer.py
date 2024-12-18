@@ -145,7 +145,7 @@ class NPPCAudioTrainer(nn.Module):
                 # Add any other relevant configuration
                 'learning_rate': self.config.learning_rate,
                 'device': self.config.device,
-                'snr_range': list(self.config.data_configuration.dataset.snr_range), # convert Tuple to List
+                'snr_range': list(self.config.data_configuration.dataset.snr_range),  # convert Tuple to List
                 'sub_sample_length_seconds': self.config.data_configuration.dataset.sub_sample_length_seconds,
                 'batch_size': self.config.data_loader_configuration.batch_size
             }
@@ -157,6 +157,78 @@ class NPPCAudioTrainer(nn.Module):
         )
         with open(metrics_path, 'w') as f:
             json.dump(final_metrics, f, indent=4)
+
+    # def base_step(self, batch):
+    #     """
+    #     Base training step adapted from NPPC for audio enhancement using CRM directions.
+    #     The main differences are:
+    #     1. Our PC directions are CRM masks (complex-valued)
+    #     2. We work with complex masks instead of real images
+    #     3. Error is computed in CRM domain
+    #
+    #     Args:
+    #         batch: Dictionary containing:
+    #             - noisy_waveform: [B,T]
+    #             - clean_waveform: [B,T]
+    #     Returns:
+    #         tuple: (objective, log_dict)
+    #     """
+    #     model = self.nppc_model
+    #     # Get batch data
+    #     noisy_waveform, clean_waveform = batch
+    #     # Get predicted CRM directions (our PC directions)
+    #     w_mat = model(noisy_waveform)  # [B, n_dirs, 2, F, T]
+    #     B, n_dirs, _, F, T = w_mat.shape
+    #     # Flatten frequency and time dimensions for PC computation
+    #     w_mat_flat = w_mat.reshape(B, n_dirs, 2, -1)  # [B, n_dirs, 2, F*T]
+    #     # get CRMS
+    #     num_groups_in_drop_band = self.config.nppc_model_configuration.audio_pc_wrapper_configuration.multi_direction_configuration.num_groups_in_drop_band
+    #
+    #     gt_crm, pred_crm = self._get_true_and_pred_crm(clean_waveform, model, noisy_waveform,
+    #                                                    num_groups_in_drop_band)
+    #     pred_crm_flat = pred_crm.reshape(B, 2, -1)  # [B, 2, F*T]
+    #     gt_crm_flat = gt_crm.reshape(B, 2, -1)  # [B,2,F*T]
+    #
+    #     # Compute norms of each CRM direction
+    #     w_norms = torch.norm(w_mat_flat, dim=(2, 3))  # [B, n_dirs]
+    #     # Normalize CRM directions
+    #     w_hat_mat = w_mat_flat / (w_norms[..., None, None] + 1e-8)  # [B, n_dirs, 2, F*T]
+    #     # Compute error in CRM domain
+    #     err = (gt_crm_flat - pred_crm_flat)  # [B, 2, F*T]
+    #     # Normalize error
+    #     err_norm = torch.norm(err, dim=(1, 2))  # [B]
+    #     err = err / (err_norm[:, None, None] + 1e-8)  # [B, 2, F*T]
+    #     w_norms = w_norms / (err_norm[:, None] + 1e-8)
+    #     # Compute projections of error onto normalized CRM directions
+    #     err_complex = torch.complex(err[:, 0, :], err[:, 1, :])
+    #     w_hat_mat_complex = torch.complex(w_hat_mat[:, :, 0, :], w_hat_mat[:, :, 1, :])
+    #     err_proj = torch.sum(w_hat_mat_complex.conj() * err_complex[:,None], dim=-1)
+    #
+    #     #err_proj = torch.sum(w_hat_mat * err[:, None], dim=(2, 3))  # [B, n_dirs]
+    #     # Reconstruction error (how well CRM directions explain the error)
+    #     reconst_err = 1 - err_proj.pow(2).sum(dim=1)  # [B]
+    #     # Second moment loss (align CRM norms with projection magnitudes)
+    #     second_moment_mse = (w_norms.pow(2) - err_proj.detach().pow(2)).pow(2)
+    #     # Compute final objective with adaptive weighting
+    #     objective = self._calculate_final_objective(reconst_err, second_moment_mse)
+    #
+    #     # Store logs
+    #     log = {
+    #         'noisy_complex': noisy_waveform,
+    #         'clean_complex': clean_waveform,
+    #         'pred_crm': pred_crm.detach(),
+    #         'w_mat': w_mat.detach(),
+    #
+    #         'err_norm': err_norm.detach(),
+    #         'err_proj': err_proj.detach(),
+    #         'w_norms': w_norms.detach(),
+    #         'reconst_err': reconst_err.detach(),
+    #         'second_moment_mse': second_moment_mse.detach(),
+    #
+    #         'objective': objective.detach()
+    #     }
+    #
+    #     return objective, log
 
     def base_step(self, batch):
         """
@@ -174,14 +246,18 @@ class NPPCAudioTrainer(nn.Module):
             tuple: (objective, log_dict)
         """
         model = self.nppc_model
+
         # Get batch data
         noisy_waveform, clean_waveform = batch
+
         # Get predicted CRM directions (our PC directions)
         w_mat = model(noisy_waveform)  # [B, n_dirs, 2, F, T]
         B, n_dirs, _, F, T = w_mat.shape
+
         # Flatten frequency and time dimensions for PC computation
         w_mat_flat = w_mat.reshape(B, n_dirs, 2, -1)  # [B, n_dirs, 2, F*T]
-        # get CRMS
+
+        # Get CRMs
         num_groups_in_drop_band = self.config.nppc_model_configuration.audio_pc_wrapper_configuration.multi_direction_configuration.num_groups_in_drop_band
 
         gt_crm, pred_crm = self._get_true_and_pred_crm(clean_waveform, model, noisy_waveform,
@@ -191,20 +267,32 @@ class NPPCAudioTrainer(nn.Module):
 
         # Compute norms of each CRM direction
         w_norms = torch.norm(w_mat_flat, dim=(2, 3))  # [B, n_dirs]
+
         # Normalize CRM directions
         w_hat_mat = w_mat_flat / (w_norms[..., None, None] + 1e-8)  # [B, n_dirs, 2, F*T]
+
         # Compute error in CRM domain
         err = (gt_crm_flat - pred_crm_flat)  # [B, 2, F*T]
+
         # Normalize error
         err_norm = torch.norm(err, dim=(1, 2))  # [B]
         err = err / (err_norm[:, None, None] + 1e-8)  # [B, 2, F*T]
         w_norms = w_norms / (err_norm[:, None] + 1e-8)
+
         # Compute projections of error onto normalized CRM directions
-        err_proj = torch.sum(w_hat_mat * err[:, None], dim=(2, 3))  # [B, n_dirs]
+        err_complex = torch.complex(err[:, 0, :], err[:, 1, :])  # Convert error to complex
+        w_hat_mat_complex = torch.complex(w_hat_mat[:, :, 0, :], w_hat_mat[:, :, 1, :])  # Convert directions to complex
+        err_proj = torch.sum(w_hat_mat_complex.conj() * err_complex[:, None], dim=-1)  # [B, n_dirs]
+
+        # Use the magnitude of the projection for further calculations
+        err_proj_mag = torch.abs(err_proj)  # [B, n_dirs]
+
         # Reconstruction error (how well CRM directions explain the error)
-        reconst_err = 1 - err_proj.pow(2).sum(dim=1)  # [B]
+        reconst_err = 1 - err_proj_mag.pow(2).sum(dim=1)  # [B]
+
         # Second moment loss (align CRM norms with projection magnitudes)
-        second_moment_mse = (w_norms.pow(2) - err_proj.detach().pow(2)).pow(2)
+        second_moment_mse = (w_norms.pow(2) - err_proj_mag.detach().pow(2)).pow(2)  # [B, n_dirs]
+
         # Compute final objective with adaptive weighting
         objective = self._calculate_final_objective(reconst_err, second_moment_mse)
 
@@ -216,7 +304,8 @@ class NPPCAudioTrainer(nn.Module):
             'w_mat': w_mat.detach(),
 
             'err_norm': err_norm.detach(),
-            'err_proj': err_proj.detach(),
+            'err_proj': err_proj.detach(),  # Keeping the complex projection for logging if needed
+            'err_proj_mag': err_proj_mag.detach(),  # Log the magnitude explicitly
             'w_norms': w_norms.detach(),
             'reconst_err': reconst_err.detach(),
             'second_moment_mse': second_moment_mse.detach(),
@@ -270,7 +359,7 @@ class NPPCAudioTrainer(nn.Module):
             gt_crm.permute(0, 3, 1, 2),  # [B, 2, F ,T]
             num_groups_in_drop_band
         )
-        #gt_crm = decompress_cIRM(gt_crm)
+        # gt_crm = decompress_cIRM(gt_crm)
         # not sure if necessary to turn it back to [B,F,T,2]
         # gt_cIRM = gt_cIRM.permute(0,2,3,1) # [B,F,T,2]
         # Get enhanced CRM from model's prediction
