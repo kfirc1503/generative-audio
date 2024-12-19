@@ -1,0 +1,8 @@
+inpainting_dataset:
+  clean_path: "../../FullSubNet_plus/data/clean/test"
+  sample_rate: 16000
+  missing_length_seconds: 1.0
+  missing_start_seconds: 2.0  # Set to null for random position
+  sub_sample_length_seconds: 8.0
+  target_dB_FS: -25.0
+  target_dB_FS_floating_value: 0.0
