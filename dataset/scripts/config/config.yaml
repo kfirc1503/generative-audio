@@ -1,12 +1,12 @@
 
 
 
-  clean_path: "../../FullSubNet_plus/data/clean"
-  noisy_path: "../../FullSubNet_plus/data/noisy"
+  clean_path: "../../FullSubNet_plus/data/clean/test"
+  noisy_path: "../../FullSubNet_plus/data/noisy/test"
   output_dir: "../../FullSubNet_plus/data/output"
   sample_rate: 16000
-  snr: 0
+  snr: -15
   num_samples: 1
-  sample_length_seconds: 8
+  sample_length_seconds: 18
   target_dB_FS: -25.0
-  silence_length: 0.2
+  silence_length: 11
