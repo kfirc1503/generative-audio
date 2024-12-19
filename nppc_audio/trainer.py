@@ -98,7 +98,7 @@ class NPPCAudioTrainer(nn.Module):
                 batch = batch.to(self.device)
 
             # Forward and backward pass
-            objective, log_dict = self.base_step(batch)
+            reconst_err,objective, log_dict = self.base_step(batch)
             self.optimizer.zero_grad()
             objective.backward()
             self.optimizer.step()
@@ -108,7 +108,8 @@ class NPPCAudioTrainer(nn.Module):
             # Use raw values from log_dict
             pbar.set_description(
                 f'Objective: {objective.item():.4f} | '
-                f'Second Moment MSE: {log_dict["second_moment_mse"].mean().item():.4f}'
+                f'Second Moment MSE: {log_dict["second_moment_mse"].mean().item():.4f} | '
+                f'Reconstract Error: {reconst_err.mean().item():.4f}'
             )
 
             # # Save checkpoint periodically
@@ -313,7 +314,7 @@ class NPPCAudioTrainer(nn.Module):
             'objective': objective.detach()
         }
 
-        return objective, log
+        return reconst_err, objective, log
 
     def save_checkpoint(self, checkpoint_path):
         """
