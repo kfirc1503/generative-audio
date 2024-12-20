@@ -24,7 +24,7 @@ class InpaintingTrainerConfig(pydantic.BaseModel):
     data_configuration: AudioInpaintingConfig
     dataloader_configuration: DataLoaderConfig
     optimizer_configuration: OptimizerConfig
-    stft_configuration: StftConfig
+    # stft_configuration: StftConfig
     learning_rate: float = 1e-4
     device: str = "cuda"
     save_interval: int = 10
@@ -123,13 +123,13 @@ class InpaintingTrainer(nn.Module):
         Returns:
             tuple: (loss, log_dict)
         """
-        #masked_spec, mask, clean_spec = batch
-        masked_waveform , mask , clean_waveform = batch
-        masked_waveform = masked_waveform.squeeze(1)
-        clean_waveform =  clean_waveform.squeeze(1)
-
-        masked_spec = audio_to_stft(masked_waveform,self.config.stft_configuration,self.device)
-        clean_spec = audio_to_stft(clean_waveform,self.config.stft_configuration,self.device)
+        masked_spec, mask, clean_spec = batch
+        # masked_waveform , mask , clean_waveform = batch
+        # masked_waveform = masked_waveform.squeeze(1)
+        # clean_waveform =  clean_waveform.squeeze(1)
+        #
+        # masked_spec = audio_to_stft(masked_waveform,self.config.stft_configuration,self.device)
+        # clean_spec = audio_to_stft(clean_waveform,self.config.stft_configuration,self.device)
         # convert the audio into specs
         # Forward pass through model
         output = self.model(masked_spec, mask)

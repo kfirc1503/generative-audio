@@ -120,6 +120,8 @@ class AudioInpaintingDataset(Dataset):
         stft_masked = audio_to_stft(masked_audio, self.config.stft_configuration, device)
         # convert the mask into a spec mask:
         mask_frames = self.time_to_spec_mask(mask, stft_clean.shape[3], masked_audio.shape[1])
+        stft_masked = stft_masked.squeeze(0)
+        stft_clean = stft_clean.squeeze(0)
 
         return stft_masked, mask_frames, stft_clean
 

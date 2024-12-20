@@ -21,6 +21,10 @@ inpainting_training_configuration:
     missing_start_seconds: 3  # null for random position
     sub_sample_length_seconds: 8.0
     target_dB_FS: -25.0
+    stft_configuration:
+      nfft: 512
+      win_length: 512
+      hop_length: 256
 
   dataloader_configuration:
     batch_size: 16
@@ -33,11 +37,11 @@ inpainting_training_configuration:
     args:
       lr: 1.0e-4
       betas: [0.9, 0.999]
-
-  stft_configuration:
-    nfft: 512
-    win_length: 512
-    hop_length: 256
+#
+#  stft_configuration:
+#    nfft: 512
+#    win_length: 512
+#    hop_length: 256
 
 #  training_configuration:
 #    device: "cuda"  # will automatically select cuda if available

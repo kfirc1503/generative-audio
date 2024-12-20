@@ -18,7 +18,7 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
 
     # 1. Direct STFT output spectrograms
     # Clean spectrogram magnitude
-    clean_mag = torch.abs(clean_spec[0, 0, :, :] + 1j * clean_spec[0, 1, :, :])
+    clean_mag = torch.abs(clean_spec[0, :, :] + 1j * clean_spec[1, :, :])
     clean_mag_db = 20 * torch.log10(clean_mag + 1e-8)
     im = axs[0, 0].imshow(clean_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                           extent=[0, sample_len_seconds, 0, clean_mag.shape[0]])
@@ -26,7 +26,7 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
     plt.colorbar(im, ax=axs[0, 0])
 
     # Masked spectrogram magnitude
-    masked_mag = torch.abs(masked_spec[0, 0, :, :] + 1j * masked_spec[0, 1, :, :])
+    masked_mag = torch.abs(masked_spec[0, :, :] + 1j * masked_spec[1, :, :])
     masked_mag_db = 20 * torch.log10(masked_mag + 1e-8)
     im = axs[0, 1].imshow(masked_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                           extent=[0, sample_len_seconds, 0, masked_mag.shape[0]])
