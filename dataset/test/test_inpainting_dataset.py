@@ -11,11 +11,14 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
     # Create STFT window
     window = torch.hann_window(stft_config.win_length)
 
+    # Set dB range
+    vmin, vmax = -120, 20
+
     # 1. Direct STFT output spectrograms
     # Clean spectrogram magnitude
     clean_mag = torch.abs(clean_spec[0,0,:,:] + 1j * clean_spec[0,1,:,:])
     clean_mag_db = 20 * torch.log10(clean_mag + 1e-8)
-    im = axs[0,0].imshow(clean_mag_db.numpy(), origin='lower', aspect='auto',
+    im = axs[0,0].imshow(clean_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                          extent=[0, sample_len_seconds, 0, clean_mag.shape[0]])
     axs[0,0].set_title('Clean Spectrogram Magnitude (Direct)')
     plt.colorbar(im, ax=axs[0,0])
@@ -23,7 +26,7 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
     # Masked spectrogram magnitude
     masked_mag = torch.abs(masked_spec[0,0,:,:] + 1j * masked_spec[0,1,:,:])
     masked_mag_db = 20 * torch.log10(masked_mag + 1e-8)
-    im = axs[0,1].imshow(masked_mag_db.numpy(), origin='lower', aspect='auto',
+    im = axs[0,1].imshow(masked_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                          extent=[0, sample_len_seconds, 0, masked_mag.shape[0]])
     axs[0,1].set_title('Masked Spectrogram Magnitude (Direct)')
     plt.colorbar(im, ax=axs[0,1])
@@ -43,7 +46,7 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
     clean_mag_from_audio = torch.abs(clean_spec_from_audio[0] + 1j * clean_spec_from_audio[1])
     clean_mag_from_audio_db = 20 * torch.log10(clean_mag_from_audio + 1e-8)
 
-    im = axs[1,0].imshow(clean_mag_from_audio_db.numpy(), origin='lower', aspect='auto',
+    im = axs[1,0].imshow(clean_mag_from_audio_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                          extent=[0, sample_len_seconds, 0, clean_mag_from_audio.shape[0]])
     axs[1,0].set_title('Clean Spectrogram (from time-domain)')
     plt.colorbar(im, ax=axs[1,0])
@@ -61,7 +64,7 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
     masked_mag_from_audio = torch.abs(masked_spec_from_audio[0] + 1j * masked_spec_from_audio[1])
     masked_mag_from_audio_db = 20 * torch.log10(masked_mag_from_audio + 1e-8)
 
-    im = axs[1,1].imshow(masked_mag_from_audio_db.numpy(), origin='lower', aspect='auto',
+    im = axs[1,1].imshow(masked_mag_from_audio_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                          extent=[0, sample_len_seconds, 0, masked_mag_from_audio.shape[0]])
     axs[1,1].set_title('Masked Spectrogram (from time-domain)')
     plt.colorbar(im, ax=axs[1,1])
@@ -81,7 +84,6 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
 
     plt.tight_layout()
     return fig
-
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig) -> None:
