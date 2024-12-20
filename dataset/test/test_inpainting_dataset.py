@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import torch
 from dataset.audio_dataset_inpainting import AudioInpaintingConfig, AudioInpaintingDataset
 
-def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_audio, masked_audio, stft_config, sample_len_seconds):
+
+def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_audio, masked_audio, stft_config,
+                          sample_len_seconds):
     """Plot spectrograms and masks for comparison"""
     fig, axs = plt.subplots(3, 2, figsize=(15, 12))
 
@@ -16,20 +18,20 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
 
     # 1. Direct STFT output spectrograms
     # Clean spectrogram magnitude
-    clean_mag = torch.abs(clean_spec[0,0,:,:] + 1j * clean_spec[0,1,:,:])
+    clean_mag = torch.abs(clean_spec[0, 0, :, :] + 1j * clean_spec[0, 1, :, :])
     clean_mag_db = 20 * torch.log10(clean_mag + 1e-8)
-    im = axs[0,0].imshow(clean_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                         extent=[0, sample_len_seconds, 0, clean_mag.shape[0]])
-    axs[0,0].set_title('Clean Spectrogram Magnitude (Direct)')
-    plt.colorbar(im, ax=axs[0,0])
+    im = axs[0, 0].imshow(clean_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[0, sample_len_seconds, 0, clean_mag.shape[0]])
+    axs[0, 0].set_title('Clean Spectrogram Magnitude (Direct)')
+    plt.colorbar(im, ax=axs[0, 0])
 
     # Masked spectrogram magnitude
-    masked_mag = torch.abs(masked_spec[0,0,:,:] + 1j * masked_spec[0,1,:,:])
+    masked_mag = torch.abs(masked_spec[0, 0, :, :] + 1j * masked_spec[0, 1, :, :])
     masked_mag_db = 20 * torch.log10(masked_mag + 1e-8)
-    im = axs[0,1].imshow(masked_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                         extent=[0, sample_len_seconds, 0, masked_mag.shape[0]])
-    axs[0,1].set_title('Masked Spectrogram Magnitude (Direct)')
-    plt.colorbar(im, ax=axs[0,1])
+    im = axs[0, 1].imshow(masked_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[0, sample_len_seconds, 0, masked_mag.shape[0]])
+    axs[0, 1].set_title('Masked Spectrogram Magnitude (Direct)')
+    plt.colorbar(im, ax=axs[0, 1])
 
     # 2. Time-domain to STFT spectrograms
     # Compute spectrograms from time-domain signals using same STFT params
@@ -46,10 +48,10 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
     clean_mag_from_audio = torch.abs(clean_spec_from_audio[0] + 1j * clean_spec_from_audio[1])
     clean_mag_from_audio_db = 20 * torch.log10(clean_mag_from_audio + 1e-8)
 
-    im = axs[1,0].imshow(clean_mag_from_audio_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                         extent=[0, sample_len_seconds, 0, clean_mag_from_audio.shape[0]])
-    axs[1,0].set_title('Clean Spectrogram (from time-domain)')
-    plt.colorbar(im, ax=axs[1,0])
+    im = axs[1, 0].imshow(clean_mag_from_audio_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[0, sample_len_seconds, 0, clean_mag_from_audio.shape[0]])
+    axs[1, 0].set_title('Clean Spectrogram (from time-domain)')
+    plt.colorbar(im, ax=axs[1, 0])
 
     masked_spec_from_audio = torch.stft(
         masked_audio,
@@ -64,26 +66,27 @@ def plot_all_spectrograms(masked_spec, spec_mask, time_mask, clean_spec, clean_a
     masked_mag_from_audio = torch.abs(masked_spec_from_audio[0] + 1j * masked_spec_from_audio[1])
     masked_mag_from_audio_db = 20 * torch.log10(masked_mag_from_audio + 1e-8)
 
-    im = axs[1,1].imshow(masked_mag_from_audio_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                         extent=[0, sample_len_seconds, 0, masked_mag_from_audio.shape[0]])
-    axs[1,1].set_title('Masked Spectrogram (from time-domain)')
-    plt.colorbar(im, ax=axs[1,1])
+    im = axs[1, 1].imshow(masked_mag_from_audio_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[0, sample_len_seconds, 0, masked_mag_from_audio.shape[0]])
+    axs[1, 1].set_title('Masked Spectrogram (from time-domain)')
+    plt.colorbar(im, ax=axs[1, 1])
 
     # 3. Masks
     time_points = torch.linspace(0, sample_len_seconds, spec_mask.shape[0])
-    axs[2,0].plot(time_points, spec_mask.numpy())
-    axs[2,0].set_title('STFT Domain Mask')
-    axs[2,0].set_ylim(-0.1, 1.1)
-    axs[2,0].grid(True)
+    axs[2, 0].plot(time_points, spec_mask.numpy())
+    axs[2, 0].set_title('STFT Domain Mask')
+    axs[2, 0].set_ylim(-0.1, 1.1)
+    axs[2, 0].grid(True)
 
     time_points = torch.linspace(0, sample_len_seconds, time_mask.shape[1])
-    axs[2,1].plot(time_points, time_mask.squeeze(0).numpy())
-    axs[2,1].set_title('Time Domain Mask')
-    axs[2,1].set_ylim(-0.1, 1.1)
-    axs[2,1].grid(True)
+    axs[2, 1].plot(time_points, time_mask.squeeze(0).numpy())
+    axs[2, 1].set_title('Time Domain Mask')
+    axs[2, 1].set_ylim(-0.1, 1.1)
+    axs[2, 1].grid(True)
 
     plt.tight_layout()
     return fig
+
 
 @hydra.main(version_base=None, config_path="config", config_name="config")
 def main(cfg: DictConfig) -> None:
@@ -96,10 +99,10 @@ def main(cfg: DictConfig) -> None:
     dataset = AudioInpaintingDataset(config)
     print(f"Dataset size: {len(dataset)}")
 
-
     # Get spectrograms from dataset
-    masked_audio, mask, clean_audio, stft_masked, mask_frames, stft_clean = dataset[0]
+    stft_masked, mask_frames, stft_clean = dataset[0]
 
+    masked_audio, mask, clean_audio = dataset.get_audio_and_time_mask(0)
     # Print shapes
     print("\nTensor shapes:")
     print(f"Clean audio: {clean_audio.shape}")
@@ -118,7 +121,7 @@ def main(cfg: DictConfig) -> None:
         clean_audio,
         masked_audio,
         config.stft_configuration,
-        config.sub_sample_length_seconds# Pass STFT config
+        config.sub_sample_length_seconds  # Pass STFT config
     )
     plt.show()
 

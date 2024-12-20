@@ -113,25 +113,7 @@ class AudioInpaintingDataset(Dataset):
                 - mask: Binary mask (1 for kept samples, 0 for missing)
                 - clean_audio: Original clean audio
         """
-        clean_file = self.clean_files[idx]
-        clean_audio = self._load_and_process_audio(clean_file)
-
-        if clean_audio is None:
-            # Handle error case by returning a different file
-            return self.__getitem__(random.randint(0, len(self) - 1))
-
-        # Normalize audio
-        clean_audio = self._normalize_audio(clean_audio)
-
-        # Create random subsegment if needed
-        if clean_audio.shape[1] > self.config.sub_sample_length:
-            max_start = clean_audio.shape[1] - self.config.sub_sample_length
-            start_idx = random.randint(0, max_start)
-            clean_audio = clean_audio[:, start_idx:start_idx + self.config.sub_sample_length]
-
-        # Create mask and masked audio
-        mask = self._create_mask(clean_audio.shape[1])
-        masked_audio = clean_audio * mask
+        clean_audio, mask, masked_audio = self.get_audio_and_time_mask(idx)
         # convert the clean and the masked audio into a stft form:
         device = torch.device("cpu")
         stft_clean = audio_to_stft(clean_audio, self.config.stft_configuration, device)
@@ -139,7 +121,24 @@ class AudioInpaintingDataset(Dataset):
         # convert the mask into a spec mask:
         mask_frames = self.time_to_spec_mask(mask, stft_clean.shape[3], masked_audio.shape[1])
 
-        return masked_audio, mask, clean_audio, stft_masked, mask_frames, stft_clean
+        return stft_masked, mask_frames, stft_clean
+
+    def get_audio_and_time_mask(self, idx):
+        clean_file = self.clean_files[idx]
+        clean_audio = self._load_and_process_audio(clean_file)
+        # Normalize audio
+        clean_audio = self._normalize_audio(clean_audio)
+        # Create random subsegment if needed
+        if clean_audio.shape[1] > self.config.sub_sample_length:
+            max_start = clean_audio.shape[1] - self.config.sub_sample_length
+            start_idx = random.randint(0, max_start)
+            clean_audio = clean_audio[:, start_idx:start_idx + self.config.sub_sample_length]
+        # Create mask and masked audio
+        mask = self._create_mask(clean_audio.shape[1])
+        masked_audio = clean_audio * mask
+        return clean_audio, mask, masked_audio
+
+    # def get_audio_and_time_mask(self, idx: int):
 
     def time_to_spec_mask(self, mask_time, T_frames, waveform_length, center=True):
         """
