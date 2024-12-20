@@ -1,9 +1,8 @@
 # Import necessary libraries for audio processing
 import torchaudio
 import torch
-from typing import Union,Tuple
+from typing import Union, Tuple
 from pathlib import Path
-
 
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
 import pydantic
@@ -134,6 +133,33 @@ def prepare_input_from_waveform(waveform, n_fft: int, hop_length: int, win_lengt
     return noisy_mag, noisy_real, noisy_imag
 
 
+def audio_to_stft(waveform: torch.Tensor, stft_configuration: StftConfig, device: torch.device) -> torch.Tensor:
+    # Ensure input has batch dimension
+    if waveform.dim() == 1:
+        waveform = waveform.unsqueeze(0)
+    if waveform.dim() == 2 and waveform.size(0) > 1:
+        pass
+        # waveform = waveform.unsqueeze(1)  # Add channel dimension
+    window = torch.hann_window(stft_configuration.win_length).to(device)
+
+    # Calculate STFT (matching the parameters from the paper)
+    stft = torch.stft(
+        waveform,
+        n_fft=stft_configuration.nfft,  # Results in 257 frequency bins
+        hop_length=stft_configuration.hop_length,  # 50% overlap
+        win_length=stft_configuration.win_length,
+        window=window,
+        center=True,
+        return_complex=True
+    )
+    # `stft` is a complex tensor of shape [B, F, T]
+    real_part = stft.real  # shape [B, F, T]
+    imag_part = stft.imag  # shape [B, F, T]
+
+    # Stack along a new channel dimension to get [B, 2, F, T]
+    stft_real_imag = torch.stack([real_part, imag_part], dim=1)  # shape [B, 2, F, T]
+    return stft_real_imag
+
 def prepare_input(audio_path: str | Path):
     """
     Prepare audio input for FullSubNet_Plus model according to the official implementation
@@ -202,7 +228,7 @@ def crm_to_stft_components(crm: torch.Tensor, noisy_real: torch.Tensor, noisy_im
     # Remove channel dimension from noisy components
     noisy_real = noisy_real.squeeze(1)
     noisy_imag = noisy_imag.squeeze(1)
-    enhanced_real, enhanced_imag = noisy_to_enhanced(crm,noisy_real, noisy_imag)
+    enhanced_real, enhanced_imag = noisy_to_enhanced(crm, noisy_real, noisy_imag)
 
     enhanced_mag = torch.sqrt(enhanced_real ** 2 + enhanced_imag ** 2)
     return enhanced_mag, enhanced_real, enhanced_imag
@@ -213,4 +239,3 @@ def crm_to_spectogram(curr_pc_crm, noisy_complex):
     enhanced_imag = curr_pc_crm[..., 1] * noisy_complex.real + curr_pc_crm[..., 0] * noisy_complex.imag
     enhanced_complex = torch.complex(enhanced_real, enhanced_imag)
     return enhanced_complex
-
