@@ -5,6 +5,7 @@ import torch
 import torchaudio
 import pydantic
 from torch.utils.data import Dataset
+from utils import audio_to_stft, StftConfig
 
 
 class AudioInpaintingConfig(pydantic.BaseModel):
@@ -17,6 +18,7 @@ class AudioInpaintingConfig(pydantic.BaseModel):
     sub_sample_length_seconds: float = 3.0
     target_dB_FS: float = -25.0
     target_dB_FS_floating_value: float = 0.0
+    stft_configuration: StftConfig
 
     # Computed fields
     sub_sample_length: int = pydantic.Field(None)
@@ -130,5 +132,68 @@ class AudioInpaintingDataset(Dataset):
         # Create mask and masked audio
         mask = self._create_mask(clean_audio.shape[1])
         masked_audio = clean_audio * mask
+        # convert the clean and the masked audio into a stft form:
+        device = torch.device("cpu")
+        stft_clean = audio_to_stft(clean_audio, self.config.stft_configuration, device)
+        stft_masked = audio_to_stft(masked_audio, self.config.stft_configuration, device)
+        # convert the mask into a spec mask:
+        mask_frames = self.time_to_spec_mask(mask, stft_clean.shape[3], masked_audio.shape[1])
 
-        return masked_audio, mask, clean_audio
+        return masked_audio, mask, clean_audio, stft_masked, mask_frames, stft_clean
+
+    def time_to_spec_mask(self, mask_time, T_frames, waveform_length, center=True):
+        """
+        Convert a time-domain mask to a spectrogram time-frame mask.
+
+        Args:
+            mask_time (torch.Tensor): Time-domain mask of shape [1, T], where T is the number of samples.
+                                      Values are expected to be binary (0 or 1).
+            T_frames (int): Number of time frames in the STFT domain.
+            waveform_length (int): Number of samples in the original waveform (T).
+            win_length (int): Window length used in STFT.
+            hop_length (int): Hop length used in STFT.
+            center (bool): Whether the STFT was computed with `center=True`.
+                           If True, frames are centered around t_frame*hop_length.
+                           If False, frames start at t_frame*hop_length.
+            device (torch.device): Optional device to place the returned mask on.
+
+        Returns:
+            torch.Tensor: A mask of shape [T_frames], where each entry is either 0 or 1.
+                          1 means the entire frame is unmasked, 0 means at least one sample in that frame was masked.
+        """
+        win_length = self.config.stft_configuration.win_length
+        hop_length = self.config.stft_configuration.hop_length
+
+        # Check shape of mask_time
+        assert mask_time.dim() == 2 and mask_time.shape[0] == 1, "mask_time should be [1, T] shape."
+
+        mask_frames = []
+        half_window = win_length // 2
+
+        for t_frame in range(T_frames):
+            if center:
+                # Frame is centered
+                start = t_frame * hop_length - half_window
+            else:
+                # Frame starts exactly at t_frame * hop_length
+                start = t_frame * hop_length
+            end = start + win_length
+
+            # Clip boundaries
+            start = max(start, 0)
+            end = min(end, waveform_length)
+
+            # If the window partially goes out of waveform range, that frame is shorter
+            # Check if there are any samples in this frame at all
+            if end <= start:
+                # No samples in this frame due to clipping, consider it masked (0)
+                frame_mask_value = 0.0
+            else:
+                frame_values = mask_time[0, start:end]
+                # Frame mask is 1 only if all samples in that window are 1
+                frame_mask_value = float((frame_values.min() == 1))
+
+            mask_frames.append(frame_mask_value)
+
+        mask_frames = torch.tensor(mask_frames)
+        return mask_frames
