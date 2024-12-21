@@ -1,0 +1,26 @@
+
+
+model_validator_configuration:
+
+
+
+
+data_configuration:
+  clean_path: "../../../../FullSubNet_plus/data/clean/train"
+  sample_rate: 16000
+  missing_length_seconds: 1.0
+  missing_start_seconds: 3
+  # Adjust the sub_sample_length_seconds to get exactly T=512:
+  sub_sample_length_seconds: 8.176
+  target_dB_FS: -25.0
+  stft_configuration:
+    # nfft chosen to yield F=256
+    nfft: 510
+    win_length: 510
+    hop_length: 256
+
+dataloader_configuration:
+  batch_size: 16
+  shuffle: true
+  num_workers: 4
+  pin_memory: true

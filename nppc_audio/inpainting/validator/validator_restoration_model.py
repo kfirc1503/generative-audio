@@ -4,7 +4,7 @@ import hydra
 from omegaconf import DictConfig
 from pathlib import Path
 import pydantic
-from nppc_audio.inpainting.networks.unet import RestorationWrapper
+from nppc_audio.inpainting.networks.unet import RestorationWrapper , UNetConfig
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset
 #from nppc_audio.inpainting.validator.config.schema import ModelValidatorConfig
 
@@ -56,6 +56,7 @@ class InpaintingModelValidatorConfig(pydantic.BaseModel):
     checkpoint_path: str
     device: str = "cuda"
     save_dir: str = "validation_results"
+    model_configuration: UNetConfig
 
 class InpaintingModelValidator:
     def __init__(self, config: InpaintingModelValidatorConfig):
@@ -66,9 +67,12 @@ class InpaintingModelValidator:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Load checkpoint
-        checkpoint = torch.load(config.checkpoint_path, map_location=self.device)
-        self.model = RestorationWrapper(checkpoint['model_config']).to(self.device)
+        checkpoint = torch.load(config.checkpoint_path, map_location="cpu")
+        # self.model = RestorationWrapper(checkpoint['model'])
+        self.model = RestorationWrapper(self.config.model_configuration)
+        # self.model = RestorationWrapper(checkpoint['model_config']).to(self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.model.to(self.device)
         self.model.eval()
 
     def validate_sample(self, masked_spec, mask, clean_spec, sample_len_seconds):
