@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import pydantic
 from typing import Tuple
-
-from nppc.auxil import NetWrapper
+import torch.nn.functional as F
 
 
 class UNetConfig(pydantic.BaseModel):
@@ -26,10 +25,9 @@ class UNet(nn.Module):
 
         # Initial block
         layers = []
-        layers.append(nn.ZeroPad2d(2))
-        ch_ = config.channels_list[0]
-        layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
-        ch = ch_
+        # Using padding='same' for PyTorch >= 2.0
+        layers.append(nn.Conv2d(ch, config.channels_list[0], kernel_size=3, padding='same'))
+        ch = config.channels_list[0]
         self.encoder_blocks.append(nn.Sequential(*layers))
         ch_hidden_list.append(ch)
 
@@ -40,7 +38,7 @@ class UNet(nn.Module):
             layers = []
             if downsample:
                 layers.append(nn.MaxPool2d(2))
-            layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
+            layers.append(nn.Conv2d(ch, ch_, kernel_size=3, padding='same'))
             ch = ch_
             layers.append(nn.GroupNorm(config.n_groups, ch))
             layers.append(nn.LeakyReLU(0.1))
@@ -50,11 +48,11 @@ class UNet(nn.Module):
         # Bottleneck
         ch_ = config.bottleneck_channels
         layers = []
-        layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
+        layers.append(nn.Conv2d(ch, ch_, kernel_size=3, padding='same'))
         ch = ch_
         layers.append(nn.GroupNorm(config.n_groups, ch))
         layers.append(nn.LeakyReLU(0.1))
-        layers.append(nn.Conv2d(ch, ch, 3, padding=1))
+        layers.append(nn.Conv2d(ch, ch, kernel_size=3, padding='same'))
         layers.append(nn.GroupNorm(config.n_groups, ch))
         layers.append(nn.LeakyReLU(0.1))
         self.bottleneck = nn.Sequential(*layers)
@@ -67,7 +65,7 @@ class UNet(nn.Module):
             ch = ch + ch_hidden_list.pop()
             layers = []
 
-            layers.append(nn.Conv2d(ch, ch_, 3, padding=1))
+            layers.append(nn.Conv2d(ch, ch_, kernel_size=3, padding='same'))
             ch = ch_
             layers.append(nn.GroupNorm(config.n_groups, ch))
             layers.append(nn.LeakyReLU(0.1))
@@ -77,11 +75,15 @@ class UNet(nn.Module):
 
         ch = ch + ch_hidden_list.pop()
         layers = []
-        layers.append(nn.Conv2d(ch, config.out_channels, 1))
-        layers.append(nn.ZeroPad2d(-2))
+        layers.append(nn.Conv2d(ch, config.out_channels, kernel_size=1, padding='same'))
         self.decoder_blocks.append(nn.Sequential(*layers))
 
-    def forward(self, x):
+    def forward(self, x_in):
+        # Store original dimensions
+        orig_freq_dim = x_in.size(2)
+        orig_time_dim = x_in.size(3)
+
+        x = x_in
         h = []
         for block in self.encoder_blocks:
             x = block(x)
@@ -89,27 +91,27 @@ class UNet(nn.Module):
 
         x = self.bottleneck(x)
         for block in self.decoder_blocks:
-            x = torch.cat((x, h.pop()), dim=1)
+            enc_feat = h.pop()
+            # Crop enc_feat if necessary to match x's dimensions
+            # x: [B, Cx, Hx, Wx], enc_feat: [B, Ce, He, We]
+            diffH = enc_feat.size(2) - x.size(2)
+            diffW = enc_feat.size(3) - x.size(3)
+
+            # Crop only if diff is positive
+            if diffH > 0 or diffW > 0:
+                enc_feat = enc_feat[:, :,
+                                    diffH // 2:enc_feat.size(2) - (diffH - diffH // 2),
+                                    diffW // 2:enc_feat.size(3) - (diffW - diffW // 2)]
+
+            x = torch.cat((x, enc_feat), dim=1)
             x = block(x)
+        # Now x may have dimensions slightly off from (orig_F, orig_T)
+        # Use interpolate to match exactly
+        x = F.interpolate(x, size=(orig_freq_dim, orig_time_dim), mode='nearest')
         return x
 
 
-# class RestorationWrapper(nn.Module):
-#     def __init__(self, net: nn.Module, mask: torch.Tensor):
-#         super().__init__()
-#         self.net = net
-#         self.mask = mask
-#
-#     def forward(self, x: torch.Tensor):
-#         x_in = x
-#         x = self.net(x)
-#
-#         if self.mask.shape[1] == 1:
-#             mask = self.mask.expand(-1, x.shape[1], -1, -1)
-#         else:
-#             mask = self.mask
-#         x = x_in * (1 - mask) + x * mask
-#         return x
+
 
 
 class RestorationWrapper(nn.Module):
@@ -129,6 +131,9 @@ class RestorationWrapper(nn.Module):
             mask = mask.expand(-1, x.shape[1], -1, -1)
         else:
             mask = mask
+        mask = mask.unsqueeze(1).unsqueeze(2)
+        mask = mask.expand(-1, x.shape[1], x.shape[2], -1)
+
         # Apply inpainting
         x = x_in * (1 - mask) + x * mask
         return x
