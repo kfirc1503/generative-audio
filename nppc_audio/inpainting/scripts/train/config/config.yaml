@@ -2,7 +2,7 @@
 
 
 n_steps: 5000
-checkpoint_dir: "../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint"
+checkpoint_dir: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint"
 inpainting_training_configuration:
   device: "cuda"
   model_configuration:
@@ -15,7 +15,7 @@ inpainting_training_configuration:
 
 
   data_configuration:
-    clean_path: "../../../FullSubNet_plus/data/clean/train"
+    clean_path: "../../../../FullSubNet_plus/data/clean/train"
     sample_rate: 16000
     missing_length_seconds: 1.0
     missing_start_seconds: 3
