@@ -46,7 +46,7 @@ def main(cfg: DictConfig):
             masked_spec,
             mask,
             clean_spec,
-            cfg.inpainting_training_configuration.data_configuration.sub_sample_length_seconds
+            config.data_configuration.sub_sample_length_seconds
         )
 
         total_mse += results['mse']
