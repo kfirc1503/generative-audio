@@ -53,7 +53,7 @@ def main(cfg: DictConfig):
         total_mae += results['mae']
 
         # Save individual sample results
-        save_dir = Path(validator_config.save_dir)
+        save_dir = Path(config.save_dir)
         save_dir.mkdir(exist_ok=True)
         results['figure'].savefig(save_dir / f"spectrogram_comparison_sample_{i}.png")
 
@@ -69,7 +69,7 @@ def main(cfg: DictConfig):
     print("\nValidation Results:")
     print(f"Average MSE across {num_samples} samples: {avg_mse:.6f}")
     print(f"Average MAE across {num_samples} samples: {avg_mae:.6f}")
-    print(f"\nResults saved in: {validator_config.save_dir}")
+    print(f"\nResults saved in: {config.save_dir}")
 
 
 if __name__ == "__main__":
