@@ -132,10 +132,17 @@ class InpaintingTrainer(nn.Module):
         # clean_spec = audio_to_stft(clean_waveform,self.config.stft_configuration,self.device)
         # convert the audio into specs
         # Forward pass through model
+
         output = self.model(masked_spec, mask)
 
+        mask = mask.unsqueeze(1).unsqueeze(2)  # Now mask is [B, 1, 1, T]
+        mask = mask.expand(-1, clean_spec.shape[1], clean_spec.shape[2], -1)  # Expand to [B, 2, F, T]
+        # Compute loss only on the masked regions
+        opposite_mask = 1 - mask
+        masked_loss = ((output - clean_spec) ** 2) * opposite_mask  # Apply mask to loss
+        loss = masked_loss.sum() / opposite_mask.sum()  # Normalize by the number of masked elements
         # Compute loss
-        loss = torch.nn.functional.mse_loss(output, clean_spec)
+        # loss = torch.nn.functional.mse_loss(output, clean_spec)
 
         # Store logs
         log = {

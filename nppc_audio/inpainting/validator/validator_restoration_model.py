@@ -67,7 +67,8 @@ class InpaintingModelValidator:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Load checkpoint
-        checkpoint = torch.load(config.checkpoint_path, map_location="cpu")
+        checkpoint_path = Path(config.checkpoint_path).absolute()
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
         # self.model = RestorationWrapper(checkpoint['model'])
         self.model = RestorationWrapper(self.config.model_configuration)
         # self.model = RestorationWrapper(checkpoint['model_config']).to(self.device)

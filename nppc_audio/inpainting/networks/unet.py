@@ -135,5 +135,6 @@ class RestorationWrapper(nn.Module):
         mask = mask.expand(-1, x.shape[1], x.shape[2], -1)
 
         # Apply inpainting
-        x = x_in * (1 - mask) + x * mask
+        # x = x_in * (1 - mask) + x * mask
+        x = x_in * mask + x * (1 - mask)
         return x

@@ -18,7 +18,7 @@ def main(cfg: DictConfig):
     validator = InpaintingModelValidator(config.model_validator_configuration)
 
     # Create dataset
-    dataset = AudioInpaintingDataset(config.dataset_configuration)
+    dataset = AudioInpaintingDataset(config.data_configuration)
 
     # Create dataloader for Validation
     dataloader = torch.utils.data.DataLoader(
@@ -34,7 +34,7 @@ def main(cfg: DictConfig):
     total_mae = 0
     num_samples = min(10, len(dataset))  # Validate on first 10 samples
 
-    print(f"\nValidating model from checkpoint: {cfg.checkpoint_path}")
+    print(f"\nValidating model from checkpoint: {config.model_validator_configuration.checkpoint_path}")
     print(f"Number of samples to validate: {num_samples}")
     print("\nProcessing samples...")
 
@@ -53,7 +53,7 @@ def main(cfg: DictConfig):
         total_mae += results['mae']
 
         # Save individual sample results
-        save_dir = Path(config.save_dir)
+        save_dir = Path(config.model_validator_configuration.save_dir)
         save_dir.mkdir(exist_ok=True)
         results['figure'].savefig(save_dir / f"spectrogram_comparison_sample_{i}.png")
 
@@ -69,7 +69,7 @@ def main(cfg: DictConfig):
     print("\nValidation Results:")
     print(f"Average MSE across {num_samples} samples: {avg_mse:.6f}")
     print(f"Average MAE across {num_samples} samples: {avg_mae:.6f}")
-    print(f"\nResults saved in: {config.save_dir}")
+    print(f"\nResults saved in: {config.model_validator_configuration.save_dir}")
 
 
 if __name__ == "__main__":
