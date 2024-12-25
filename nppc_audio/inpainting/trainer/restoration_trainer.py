@@ -13,6 +13,7 @@ from dataset.audio_dataset_inpainting import AudioInpaintingDataset, AudioInpain
 from use_pre_trained_model.model_validator.config.schema import DataLoaderConfig
 from utils import StftConfig, audio_to_stft
 
+
 class OptimizerConfig(pydantic.BaseModel):
     type: str
     args: dict
@@ -62,7 +63,7 @@ class InpaintingTrainer(nn.Module):
             **config.optimizer_configuration.args
         )
 
-    def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints"):
+    def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints", save_flag=False):
         """
         Main training loop using LoopLoader
 
@@ -101,15 +102,17 @@ class InpaintingTrainer(nn.Module):
             )
 
             self.step += 1
+        if save_flag:
+            # Save final checkpoint
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_checkpoint_path = os.path.join(
+                checkpoint_dir,
+                f"checkpoint_final_{timestamp}.pt"
+            )
+            self._get_and_save_metrics(checkpoint_dir, log_dict, n_epochs, n_steps, timestamp)
+            self.save_checkpoint(final_checkpoint_path)
+        # plotting loss graph:
 
-        # Save final checkpoint
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_checkpoint_path = os.path.join(
-            checkpoint_dir,
-            f"checkpoint_final_{timestamp}.pt"
-        )
-        self._get_and_save_metrics(checkpoint_dir, log_dict, n_epochs, n_steps, timestamp)
-        self.save_checkpoint(final_checkpoint_path)
 
     def base_step(self, batch):
         """
