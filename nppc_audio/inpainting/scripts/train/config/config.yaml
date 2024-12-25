@@ -15,7 +15,7 @@ inpainting_training_configuration:
   data_configuration:
     clean_path: "../../../../FullSubNet_plus/data/clean/tmp"
     sample_rate: 16000
-    missing_length_seconds: 0.5
+    missing_length_seconds: 0.1
     missing_start_seconds: 3
     # Adjust the sub_sample_length_seconds to get exactly T=512:
     sub_sample_length_seconds: 8.176

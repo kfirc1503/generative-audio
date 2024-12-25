@@ -117,9 +117,12 @@ class AudioInpaintingDataset(Dataset):
         # convert the clean and the masked audio into a stft form:
         device = torch.device("cpu")
         stft_clean = audio_to_stft(clean_audio, self.config.stft_configuration, device)
-        stft_masked = audio_to_stft(masked_audio, self.config.stft_configuration, device)
+        # stft_masked = audio_to_stft(masked_audio, self.config.stft_configuration, device)
         # convert the mask into a spec mask:
         mask_frames = self.time_to_spec_mask(mask, stft_clean.shape[3], masked_audio.shape[1])
+        mask_expand = mask_frames.unsqueeze(0).unsqueeze(1).unsqueeze(2)
+        mask_expand = mask_expand.expand(-1, stft_clean.shape[1], stft_clean.shape[2], -1)
+        stft_masked = stft_clean * mask_expand
         stft_masked = stft_masked.squeeze(0)
         stft_clean = stft_clean.squeeze(0)
 

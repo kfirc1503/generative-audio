@@ -120,11 +120,10 @@ class RestorationWrapper(nn.Module):
         self.config = config
         self.net = UNet(config)
 
-    def forward(self, x: torch.Tensor, mask: torch.Tensor):
+    def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
         # x shape: (B, 2, F, T) [real, imag]
-        x_in = x
         # Normalize both real and imag
-        x = self.net(x)
+        x = self.net(x_in)
 
         # Broadcast mask if needed
         if mask.shape[1] == 1:
@@ -137,4 +136,5 @@ class RestorationWrapper(nn.Module):
         # Apply inpainting
         # x = x_in * (1 - mask) + x * mask
         x = x_in * mask + x * (1 - mask)
+
         return x
