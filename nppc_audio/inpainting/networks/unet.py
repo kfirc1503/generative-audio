@@ -198,7 +198,7 @@ class DecoderBlock(nn.Module):
 ##############################################################################
 # U-Net
 ##############################################################################
-class UNet(nn.Module):
+class UNet2(nn.Module):
     """
     6 encoder blocks, 6 decoder blocks.
     The final output is a 2D spectrogram [B, 1, F, T].
@@ -251,6 +251,36 @@ class UNet(nn.Module):
 
         return out
 
+class UNet(nn.Module):
+    def __init__(self):
+        super(UNet, self).__init__()
+        self.inc = inconv(1, 64)
+        self.down1 = down(64, 128)
+        self.down2 = down(128, 256)
+        self.down3 = down(256, 512)
+        self.down4 = down(512, 512)
+        self.up1 = up(1024, 256)
+        self.up2 = up(512, 128)
+        self.up3 = up(256, 64)
+        self.up4 = up(128, 64)
+        self.outc = outconv(64, 1)
+
+    def forward(self, x):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        x = self.outc(x)
+        return x
+
+
+
+
 class RestorationWrapper(nn.Module):
     def __init__(self, config: UNetConfig):
         super().__init__()
@@ -258,21 +288,12 @@ class RestorationWrapper(nn.Module):
         self.net = UNet()
 
     def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
-        # x shape: (B, 2, F, T) [real, imag]
-        # Normalize both real and imag
-        #normalized the masked spectogram,
-        # x_in_norm, mean, std = normalize_spectrograms(x_in)
-
+        # x shape: (B, 1, F, T) [real, imag]
         x_norm = self.net(x_in)
         x = x_norm
-        #Denormalized
-        # x = denormalize_spectrograms(x_norm, mean, std)
         # Apply inpainting
-        # x = x_in * (1 - mask) + x * mask
-        x = x_in * mask + x * (1 - mask)
-#         x = x_in[:,:-1,:,:] * mask + x * (1 - mask)
-
-
+        mask_1_channel = mask[:,0,:,:].unsqueeze(1)
+        x = x_in * mask_1_channel + x * (1 - mask_1_channel)
         return x
 
 
