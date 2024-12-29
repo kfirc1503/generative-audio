@@ -6,7 +6,7 @@ from nppc_audio.inpainting.trainer.restoration_trainer import InpaintingTrainerC
 class Config(pydantic.BaseModel):
     inpainting_training_configuration: InpaintingTrainerConfig
     checkpoint_dir: str
-    n_steps: int = None
+    n_steps: int = 10
     n_epochs: int = None
 
 

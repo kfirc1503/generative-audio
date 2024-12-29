@@ -1,50 +1,43 @@
 # Configuration for audio inpainting training
-#n_steps: 2000
-n_epochs: 30
-checkpoint_dir: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint"
+
+
+n_steps: 5000
+checkpoint_dir: "../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint"
 inpainting_training_configuration:
   device: "cuda"
   model_configuration:
-    in_channels: 1
-    out_channels: 1
-#    base_channels: 64
-#    base_filters: 64
-#    channels_list: [32, 64, 128, 256]
-#    bottleneck_channels: 512
-#    min_channels_decoder: 64
-#    n_groups: 8
+    in_channels: 2
+    out_channels: 2
+    channels_list: [32, 64, 128, 256]
+    bottleneck_channels: 512
+    min_channels_decoder: 64
+    n_groups: 8
 
 
   data_configuration:
-    clean_path: "../../../../FullSubNet_plus/data/clean/train"
+    clean_path: "../../../FullSubNet_plus/data/clean/train"
     sample_rate: 16000
-    missing_length_seconds: 0.064
-    missing_start_seconds: 0.5
+    missing_length_seconds: 1.0
+    missing_start_seconds: 3
     # Adjust the sub_sample_length_seconds to get exactly T=512:
-#    sub_sample_length_seconds: 8.176
-#    sub_sample_length_seconds: 4.088
-    sub_sample_length_seconds: 1.022
-
+    sub_sample_length_seconds: 8.176
     target_dB_FS: -25.0
     stft_configuration:
       # nfft chosen to yield F=256
-#      nfft: 510
-#      win_length: 510
-#      hop_length: 256
-      nfft: 255
-      win_length: 255
-      hop_length: 128
+      nfft: 510
+      win_length: 510
+      hop_length: 256
 
   dataloader_configuration:
-    batch_size: 32
+    batch_size: 16
     shuffle: true
-    num_workers: 8
-    pin_memory: false
+    num_workers: 4
+    pin_memory: true
 
   optimizer_configuration:
     type: "Adam"
     args:
-      lr: 2.0e-4
+      lr: 1.0e-4
       betas: [0.9, 0.999]
 #
 #  stft_configuration:

@@ -5,11 +5,12 @@ from omegaconf import DictConfig
 from pathlib import Path
 import pydantic
 from nppc_audio.inpainting.networks.unet import RestorationWrapper , UNetConfig
+from nppc_audio.inpainting.trainer.restoration_trainer import preprocess_log_magnitude
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset
 #from nppc_audio.inpainting.validator.config.schema import ModelValidatorConfig
 
 
-def plot_spectrograms_and_error(clean_spec, masked_spec, output_spec, sample_len_seconds):
+def plot_spectrograms_and_error(clean_spec, masked_spec, output_mag, sample_len_seconds):
     """Plot spectrograms and reconstruction error"""
     fig, axs = plt.subplots(2, 2, figsize=(15, 12))
 
@@ -33,17 +34,17 @@ def plot_spectrograms_and_error(clean_spec, masked_spec, output_spec, sample_len
     plt.colorbar(im, ax=axs[0, 1])
 
     # Model output spectrogram
-    output_mag = torch.abs(output_spec[0, 0, :, :] + 1j * output_spec[0, 1, :, :])
-    output_mag_db = 20 * torch.log10(output_mag + 1e-8)
+    # output_mag = torch.abs(output_spec[0, 0, :, :] + 1j * output_spec[0, 1, :, :])
+    output_mag_db = 20 * torch.log10(output_mag[0,0,:,:] + 1e-8)
     im = axs[1, 0].imshow(output_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                           extent=[0, sample_len_seconds, 0, output_mag.shape[0]])
     axs[1, 0].set_title('Model Output Spectrogram')
     plt.colorbar(im, ax=axs[1, 0])
 
     # Error plot (difference between clean and output)
-    error = torch.abs(clean_mag - output_mag)
+    error = torch.abs(clean_mag - output_mag[0,0,:,:])
     error_db = 20 * torch.log10(error + 1e-8)
-    im = axs[1, 1].imshow(error_db.numpy(), origin='lower', aspect='auto',
+    im = axs[1, 1].imshow(error_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                           extent=[0, sample_len_seconds, 0, error.shape[0]])
     axs[1, 1].set_title('Reconstruction Error (dB)')
     plt.colorbar(im, ax=axs[1, 1])
@@ -83,23 +84,31 @@ class InpaintingModelValidator:
             masked_spec = masked_spec.to(self.device)
             mask = mask.to(self.device)
             clean_spec = clean_spec.to(self.device)
+            # turn it into normalized log amplitude
+            clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
+            clean_spec_mag = clean_spec_mag.unsqueeze(1)
+            clean_spec_normalized_log , mean, std = preprocess_log_magnitude(clean_spec_mag)
+            masked_spec_normalized_log = clean_spec_normalized_log * mask[:,0,:,:].unsqueeze(1)
+            output_log_mag_normalized = self.model(masked_spec_normalized_log, mask)
+            output_log_mag = output_log_mag_normalized * std + mean
+            output_mag = torch.exp(output_log_mag)
 
             # Get model output
-            output = self.model(masked_spec, mask)
+            # output = self.model(masked_spec, mask)
 
             # Calculate errors
-            mse = torch.nn.functional.mse_loss(output, clean_spec).item()
-            mae = torch.nn.functional.l1_loss(output, clean_spec).item()
+            mse = torch.nn.functional.mse_loss(output_mag, clean_spec_mag).item()
+            mae = torch.nn.functional.l1_loss(output_mag, clean_spec_mag).item()
 
             # Plot results
             fig = plot_spectrograms_and_error(clean_spec.cpu(), masked_spec.cpu(),
-                                              output.cpu(), sample_len_seconds)
+                                              output_mag.cpu(), sample_len_seconds)
 
             return {
                 'mse': mse,
                 'mae': mae,
                 'figure': fig,
-                'output': output.cpu()
+                'output': output_mag.cpu()
             }
 
 

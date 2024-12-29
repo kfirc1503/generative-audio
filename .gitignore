@@ -1429,4 +1429,6 @@ FullSubNet_plus/data
 use_pre_trained_model/outputs
 nppc_audio/scripts/checkpoints
 nppc_audio/scripts/outputs
+nppc_audio/scripts/validator/outputs
+nppc_audio/scripts/train/outputs
 #./FullSubNet_plus/.idea

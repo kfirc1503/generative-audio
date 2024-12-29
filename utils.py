@@ -239,3 +239,17 @@ def crm_to_spectogram(curr_pc_crm, noisy_complex):
     enhanced_imag = curr_pc_crm[..., 1] * noisy_complex.real + curr_pc_crm[..., 0] * noisy_complex.imag
     enhanced_complex = torch.complex(enhanced_real, enhanced_imag)
     return enhanced_complex
+
+
+def normalize_spectrograms(spec):
+    """Standardize to zero mean and unit variance"""
+    B, C, F, T = spec.shape
+    spec_flat = spec.view(B, C, -1)
+    spec_mean = spec_flat.mean(dim=2, keepdim=True).unsqueeze(-1)
+    spec_std = spec_flat.std(dim=2, keepdim=True).unsqueeze(-1)
+    return (spec - spec_mean) / (spec_std + 1e-6), spec_mean, spec_std
+
+
+def denormalize_spectrograms(spec_norm, spec_mean, spec_std):
+    """Denormalize back to original scale"""
+    return spec_norm * (spec_std + 1e-6) + spec_mean

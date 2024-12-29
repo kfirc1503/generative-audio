@@ -42,6 +42,9 @@ def main(cfg: DictConfig):
         if i >= num_samples:
             break
 
+        mask = mask.unsqueeze(1).unsqueeze(2)
+        mask = mask.expand(-1, clean_spec.shape[1], clean_spec.shape[2], -1)
+
         results = validator.validate_sample(
             masked_spec,
             mask,
