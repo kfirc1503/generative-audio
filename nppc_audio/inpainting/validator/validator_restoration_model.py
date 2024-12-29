@@ -97,6 +97,7 @@ class InpaintingModelValidator:
             # output = self.model(masked_spec, mask)
 
             # Calculate errors
+            #TODO calculate the mse and the mae only on the gap area like the loss training
             mse = torch.nn.functional.mse_loss(output_mag, clean_spec_mag).item()
             mae = torch.nn.functional.l1_loss(output_mag, clean_spec_mag).item()
 
