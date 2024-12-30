@@ -1,14 +1,10 @@
-
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pydantic
 from typing import Tuple
-from utils import normalize_spectrograms,denormalize_spectrograms
+from utils import normalize_spectrograms, denormalize_spectrograms
 from nppc_audio.inpainting.networks.tmp_utils import *
-
-
 
 
 # class UNetConfig(pydantic.BaseModel):
@@ -118,13 +114,6 @@ from nppc_audio.inpainting.networks.tmp_utils import *
 #
 
 
-
-
-
-
-
-
-
 # Configuration
 ##############################################################################
 class UNetConfig(pydantic.BaseModel):
@@ -204,11 +193,11 @@ class UNet2(nn.Module):
     The final output is a 2D spectrogram [B, 1, F, T].
     """
 
-    def __init__(self):
+    def __init__(self, config: UNetConfig):
         super().__init__()
-
+        self.config = config
         # Encoder (blue blocks)
-        self.enc1 = EncoderBlock(1, 16, 7)  # Block 1: (7, 16)
+        self.enc1 = EncoderBlock(config.in_channels, 16, 7)  # Block 1: (7, 16)
         self.enc2 = EncoderBlock(16, 32, 5)  # Block 2: (5, 32)
         self.enc3 = EncoderBlock(32, 64, 5)  # Block 3: (5, 64)
         self.enc4 = EncoderBlock(64, 128, 3)  # Block 4: (3, 128)
@@ -221,7 +210,7 @@ class UNet2(nn.Module):
         self.dec4 = DecoderBlock(128 + 64, 64, 3)  # Block 4
         self.dec3 = DecoderBlock(64 + 32, 32, 3)  # Block 3
         self.dec2 = DecoderBlock(32 + 16, 16, 3)  # Block 2
-        self.dec1 = DecoderBlock(16 + 1, 1, 3, final=True)  # Block 1
+        self.dec1 = DecoderBlock(16 + 1, config.out_channels, 3, final=True)  # Block 1
 
     def forward(self, x):
         """
@@ -251,6 +240,7 @@ class UNet2(nn.Module):
 
         return out
 
+
 class UNet(nn.Module):
     def __init__(self):
         super(UNet, self).__init__()
@@ -279,8 +269,6 @@ class UNet(nn.Module):
         return x
 
 
-
-
 class RestorationWrapper(nn.Module):
     def __init__(self, config: UNetConfig):
         super().__init__()
@@ -288,12 +276,11 @@ class RestorationWrapper(nn.Module):
         self.net = UNet()
 
     def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
-        # x shape: (B, 1, F, T) [real, imag]
-        x_norm = self.net(x_in)
-        x = x_norm
+        x = self.net(x_in)
+        # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
+        mask_broadcasted = mask[:, 0, :, :].unsqueeze(1)  # Start with shape [B, 1, F, T]
+        if x_in.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
+            mask_broadcasted = mask_broadcasted.expand(-1, x_in.shape[1], -1,-1)  # Broadcast along the channel dimension
         # Apply inpainting
-        mask_1_channel = mask[:,0,:,:].unsqueeze(1)
-        x = x_in * mask_1_channel + x * (1 - mask_1_channel)
+        x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
         return x
-
-
