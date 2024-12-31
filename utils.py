@@ -1,9 +1,8 @@
 # Import necessary libraries for audio processing
 import torchaudio
 import torch
-from typing import Union,Tuple
+from typing import Union, Tuple
 from pathlib import Path
-
 
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
 import pydantic
@@ -20,6 +19,15 @@ class AudioConfig(pydantic.BaseModel):
     sr: int = 16000
     stft_configuration: StftConfig
 
+class OptimizerConfig(pydantic.BaseModel):
+    type: str
+    args: dict
+
+class DataLoaderConfig(pydantic.BaseModel):
+    batch_size: int = 8
+    num_workers: int = 4
+    pin_memory: bool = True
+    shuffle: bool = False
 
 def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_length):
     """
@@ -134,6 +142,33 @@ def prepare_input_from_waveform(waveform, n_fft: int, hop_length: int, win_lengt
     return noisy_mag, noisy_real, noisy_imag
 
 
+def audio_to_stft(waveform: torch.Tensor, stft_configuration: StftConfig, device: torch.device) -> torch.Tensor:
+    # Ensure input has batch dimension
+    if waveform.dim() == 1:
+        waveform = waveform.unsqueeze(0)
+    if waveform.dim() == 2 and waveform.size(0) > 1:
+        pass
+        # waveform = waveform.unsqueeze(1)  # Add channel dimension
+    window = torch.hann_window(stft_configuration.win_length).to(device)
+
+    # Calculate STFT (matching the parameters from the paper)
+    stft = torch.stft(
+        waveform,
+        n_fft=stft_configuration.nfft,  # Results in 257 frequency bins
+        hop_length=stft_configuration.hop_length,  # 50% overlap
+        win_length=stft_configuration.win_length,
+        window=window,
+        center=True,
+        return_complex=True
+    )
+    # `stft` is a complex tensor of shape [B, F, T]
+    real_part = stft.real  # shape [B, F, T]
+    imag_part = stft.imag  # shape [B, F, T]
+
+    # Stack along a new channel dimension to get [B, 2, F, T]
+    stft_real_imag = torch.stack([real_part, imag_part], dim=1)  # shape [B, 2, F, T]
+    return stft_real_imag
+
 def prepare_input(audio_path: str | Path):
     """
     Prepare audio input for FullSubNet_Plus model according to the official implementation
@@ -202,7 +237,7 @@ def crm_to_stft_components(crm: torch.Tensor, noisy_real: torch.Tensor, noisy_im
     # Remove channel dimension from noisy components
     noisy_real = noisy_real.squeeze(1)
     noisy_imag = noisy_imag.squeeze(1)
-    enhanced_real, enhanced_imag = noisy_to_enhanced(crm,noisy_real, noisy_imag)
+    enhanced_real, enhanced_imag = noisy_to_enhanced(crm, noisy_real, noisy_imag)
 
     enhanced_mag = torch.sqrt(enhanced_real ** 2 + enhanced_imag ** 2)
     return enhanced_mag, enhanced_real, enhanced_imag
@@ -214,3 +249,37 @@ def crm_to_spectogram(curr_pc_crm, noisy_complex):
     enhanced_complex = torch.complex(enhanced_real, enhanced_imag)
     return enhanced_complex
 
+
+def normalize_spectrograms(spec):
+    """Standardize to zero mean and unit variance"""
+    B, C, F, T = spec.shape
+    spec_flat = spec.view(B, C, -1)
+    spec_mean = spec_flat.mean(dim=2, keepdim=True).unsqueeze(-1)
+    spec_std = spec_flat.std(dim=2, keepdim=True).unsqueeze(-1)
+    return (spec - spec_mean) / (spec_std + 1e-6), spec_mean, spec_std
+
+
+def denormalize_spectrograms(spec_norm, spec_mean, spec_std):
+    """Denormalize back to original scale"""
+    return spec_norm * (spec_std + 1e-6) + spec_mean
+
+
+def preprocess_log_magnitude(magnitude, eps=1e-6):
+    """
+    Convert magnitude spectrogram to normalized log-magnitude spectrogram.
+
+    Args:
+        magnitude (torch.Tensor): Input magnitude spectrogram.
+        eps (float): Small constant to avoid log(0).
+
+    Returns:
+        torch.Tensor: Normalized log-magnitude spectrogram.
+        torch.Tensor: Mean of the log-magnitude spectrogram.
+        torch.Tensor: Standard deviation of the log-magnitude spectrogram.
+    """
+    log_mag = torch.log(magnitude + eps)
+    mean = log_mag.mean()
+    std = log_mag.std()
+    # normalized_log_mag = log_mag
+    normalized_log_mag = (log_mag - mean) / std
+    return normalized_log_mag, mean, std
