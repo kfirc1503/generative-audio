@@ -276,9 +276,11 @@ class RestorationWrapper(nn.Module):
         self.net = UNet()
 
     def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
+        # input dims of the mask are [B,1,F,T]
+        # the dims of x change according to the in_channels config
         x = self.net(x_in)
         # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
-        mask_broadcasted = mask[:, 0, :, :].unsqueeze(1)  # Start with shape [B, 1, F, T]
+        mask_broadcasted = mask
         if x_in.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
             mask_broadcasted = mask_broadcasted.expand(-1, x_in.shape[1], -1,-1)  # Broadcast along the channel dimension
         # Apply inpainting

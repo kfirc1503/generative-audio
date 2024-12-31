@@ -19,6 +19,15 @@ class AudioConfig(pydantic.BaseModel):
     sr: int = 16000
     stft_configuration: StftConfig
 
+class OptimizerConfig(pydantic.BaseModel):
+    type: str
+    args: dict
+
+class DataLoaderConfig(pydantic.BaseModel):
+    batch_size: int = 8
+    num_workers: int = 4
+    pin_memory: bool = True
+    shuffle: bool = False
 
 def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_length):
     """
@@ -253,3 +262,24 @@ def normalize_spectrograms(spec):
 def denormalize_spectrograms(spec_norm, spec_mean, spec_std):
     """Denormalize back to original scale"""
     return spec_norm * (spec_std + 1e-6) + spec_mean
+
+
+def preprocess_log_magnitude(magnitude, eps=1e-6):
+    """
+    Convert magnitude spectrogram to normalized log-magnitude spectrogram.
+
+    Args:
+        magnitude (torch.Tensor): Input magnitude spectrogram.
+        eps (float): Small constant to avoid log(0).
+
+    Returns:
+        torch.Tensor: Normalized log-magnitude spectrogram.
+        torch.Tensor: Mean of the log-magnitude spectrogram.
+        torch.Tensor: Standard deviation of the log-magnitude spectrogram.
+    """
+    log_mag = torch.log(magnitude + eps)
+    mean = log_mag.mean()
+    std = log_mag.std()
+    # normalized_log_mag = log_mag
+    normalized_log_mag = (log_mag - mean) / std
+    return normalized_log_mag, mean, std

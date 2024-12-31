@@ -11,29 +11,10 @@ import matplotlib.pyplot as plt
 from nppc_audio.inpainting.networks.unet import UNetConfig, RestorationWrapper
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset, AudioInpaintingConfig
 from use_pre_trained_model.model_validator.config.schema import DataLoaderConfig
-from utils import normalize_spectrograms, denormalize_spectrograms
+from utils import preprocess_log_magnitude
 
 
 # Preprocessing and Postprocessing utilities
-def preprocess_log_magnitude(magnitude, eps=1e-6):
-    """
-    Convert magnitude spectrogram to normalized log-magnitude spectrogram.
-
-    Args:
-        magnitude (torch.Tensor): Input magnitude spectrogram.
-        eps (float): Small constant to avoid log(0).
-
-    Returns:
-        torch.Tensor: Normalized log-magnitude spectrogram.
-        torch.Tensor: Mean of the log-magnitude spectrogram.
-        torch.Tensor: Standard deviation of the log-magnitude spectrogram.
-    """
-    log_mag = torch.log(magnitude + eps)
-    mean = log_mag.mean()
-    std = log_mag.std()
-    # normalized_log_mag = log_mag
-    normalized_log_mag = (log_mag - mean) / std
-    return normalized_log_mag, mean, std
 
 
 class OptimizerConfig(pydantic.BaseModel):

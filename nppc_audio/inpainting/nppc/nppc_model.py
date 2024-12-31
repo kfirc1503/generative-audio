@@ -38,13 +38,13 @@ class NPPCModel(nn.Module):
     def forward(self, masked_spec_mag_norm:torch.Tensor , mask: torch.Tensor):
         # both size of [B,1,F,T]
         #first get the pred spec mag norm from the pretrain model:
-        with torch.no_grad():
-            pred_spec_mag_norm = self.pretrained_restoration_model(masked_spec_mag_norm, mask)
+        pred_spec_mag_norm = self.get_pred_spec_mag_norm(masked_spec_mag_norm, mask)
         # now let's concatinate the masked spec into the pred_spec
         masked_with_pred_spec_mag_norm = torch.cat((masked_spec_mag_norm, pred_spec_mag_norm), dim=1)
         w_mat = self.pc_wrapper(masked_with_pred_spec_mag_norm , mask)
         return w_mat # [B,n_dirs,F,T]
 
-
-
-
+    def get_pred_spec_mag_norm(self, masked_spec_mag_norm, mask):
+        with torch.no_grad():
+            pred_spec_mag_norm = self.pretrained_restoration_model(masked_spec_mag_norm, mask)
+        return pred_spec_mag_norm

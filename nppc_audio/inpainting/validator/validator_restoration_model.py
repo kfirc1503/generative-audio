@@ -5,7 +5,7 @@ from omegaconf import DictConfig
 from pathlib import Path
 import pydantic
 from nppc_audio.inpainting.networks.unet import RestorationWrapper , UNetConfig
-from nppc_audio.inpainting.trainer.restoration_trainer import preprocess_log_magnitude
+from utils import preprocess_log_magnitude
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset
 #from nppc_audio.inpainting.validator.config.schema import ModelValidatorConfig
 
