@@ -19,6 +19,15 @@ class AudioConfig(pydantic.BaseModel):
     sr: int = 16000
     stft_configuration: StftConfig
 
+class OptimizerConfig(pydantic.BaseModel):
+    type: str
+    args: dict
+
+class DataLoaderConfig(pydantic.BaseModel):
+    batch_size: int = 8
+    num_workers: int = 4
+    pin_memory: bool = True
+    shuffle: bool = False
 
 def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_length):
     """
@@ -239,3 +248,38 @@ def crm_to_spectogram(curr_pc_crm, noisy_complex):
     enhanced_imag = curr_pc_crm[..., 1] * noisy_complex.real + curr_pc_crm[..., 0] * noisy_complex.imag
     enhanced_complex = torch.complex(enhanced_real, enhanced_imag)
     return enhanced_complex
+
+
+def normalize_spectrograms(spec):
+    """Standardize to zero mean and unit variance"""
+    B, C, F, T = spec.shape
+    spec_flat = spec.view(B, C, -1)
+    spec_mean = spec_flat.mean(dim=2, keepdim=True).unsqueeze(-1)
+    spec_std = spec_flat.std(dim=2, keepdim=True).unsqueeze(-1)
+    return (spec - spec_mean) / (spec_std + 1e-6), spec_mean, spec_std
+
+
+def denormalize_spectrograms(spec_norm, spec_mean, spec_std):
+    """Denormalize back to original scale"""
+    return spec_norm * (spec_std + 1e-6) + spec_mean
+
+
+def preprocess_log_magnitude(magnitude, eps=1e-6):
+    """
+    Convert magnitude spectrogram to normalized log-magnitude spectrogram.
+
+    Args:
+        magnitude (torch.Tensor): Input magnitude spectrogram.
+        eps (float): Small constant to avoid log(0).
+
+    Returns:
+        torch.Tensor: Normalized log-magnitude spectrogram.
+        torch.Tensor: Mean of the log-magnitude spectrogram.
+        torch.Tensor: Standard deviation of the log-magnitude spectrogram.
+    """
+    log_mag = torch.log(magnitude + eps)
+    mean = log_mag.mean()
+    std = log_mag.std()
+    # normalized_log_mag = log_mag
+    normalized_log_mag = (log_mag - mean) / std
+    return normalized_log_mag, mean, std

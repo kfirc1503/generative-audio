@@ -6,3 +6,7 @@ inpainting_dataset:
   sub_sample_length_seconds: 8.0
   target_dB_FS: -25.0
   target_dB_FS_floating_value: 0.0
+  stft_configuration:
+    nfft: 512
+    win_length: 512
+    hop_length: 256

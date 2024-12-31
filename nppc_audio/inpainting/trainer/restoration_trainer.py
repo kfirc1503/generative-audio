@@ -7,11 +7,15 @@ from datetime import datetime
 import json
 from tqdm.auto import tqdm
 from nppc.auxil import LoopLoader
-
-from nppc_audio.inpainting.networks.unet import UNet, UNetConfig, RestorationWrapper
+import matplotlib.pyplot as plt
+from nppc_audio.inpainting.networks.unet import UNetConfig, RestorationWrapper
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset, AudioInpaintingConfig
 from use_pre_trained_model.model_validator.config.schema import DataLoaderConfig
-from utils import StftConfig, audio_to_stft
+from utils import preprocess_log_magnitude
+
+
+# Preprocessing and Postprocessing utilities
+
 
 class OptimizerConfig(pydantic.BaseModel):
     type: str
@@ -24,7 +28,7 @@ class InpaintingTrainerConfig(pydantic.BaseModel):
     data_configuration: AudioInpaintingConfig
     dataloader_configuration: DataLoaderConfig
     optimizer_configuration: OptimizerConfig
-    stft_configuration: StftConfig
+    # stft_configuration: StftConfig
     learning_rate: float = 1e-4
     device: str = "cuda"
     save_interval: int = 10
@@ -62,18 +66,12 @@ class InpaintingTrainer(nn.Module):
             **config.optimizer_configuration.args
         )
 
-    def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints"):
-        """
-        Main training loop using LoopLoader
-
-        Args:
-            checkpoint_dir: Directory to save checkpoints
-            n_steps: Number of training steps (optional)
-            n_epochs: Number of training epochs (optional)
-
-        Note: Must provide either n_steps or n_epochs
-        """
+    def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints", save_flag=True):
+        """Main training loop using LoopLoader"""
         os.makedirs(checkpoint_dir, exist_ok=True)
+
+        # Initialize loss history
+        loss_history = []
 
         # Create loop loader
         loop_loader = LoopLoader(
@@ -95,6 +93,9 @@ class InpaintingTrainer(nn.Module):
             loss.backward()
             self.optimizer.step()
 
+            # Store loss
+            loss_history.append(loss.item())
+
             # Update progress bar
             pbar.set_description(
                 f'Loss: {loss.item():.4f}'
@@ -102,44 +103,75 @@ class InpaintingTrainer(nn.Module):
 
             self.step += 1
 
-        # Save final checkpoint
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_checkpoint_path = os.path.join(
-            checkpoint_dir,
-            f"checkpoint_final_{timestamp}.pt"
-        )
-        self._get_and_save_metrics(checkpoint_dir, log_dict, n_epochs, n_steps, timestamp)
-        self.save_checkpoint(final_checkpoint_path)
+        # Plot loss curve
+        self.plot_loss_curve(loss_history)
+
+        if save_flag:
+            # Save final checkpoint
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_checkpoint_path = os.path.join(
+                checkpoint_dir,
+                f"checkpoint_final_{timestamp}.pt"
+            )
+
+            # Save metrics including loss history
+            self._get_and_save_metrics(checkpoint_dir, log_dict, n_epochs, n_steps, timestamp)
+            self.save_checkpoint(final_checkpoint_path)
+
+    def plot_loss_curve(self, loss_history):
+        """Plot the training loss curve"""
+        plt.figure(figsize=(10, 6))
+        plt.plot(loss_history)
+        plt.xlabel('Steps')
+        plt.ylabel('Loss')
+        plt.title('Training Loss Over Time')
+        plt.grid(True)
+        plt.show()
 
     def base_step(self, batch):
-        """
-        Base training step for inpainting
+        """Base training step for inpainting using a mask created from clean_spec."""
+        # We now ignore the masked_spec from the dataset;
+        # we generate our own masked_spec_norm from clean_spec_norm.
 
-        Args:
-            batch: Tuple containing:
-                masked_spec: [B, 2, F, T]
-                mask: [B, 1, F, T]
-                clean_spec: [B, 2, F, T]
-        Returns:
-            tuple: (loss, log_dict)
-        """
-        #masked_spec, mask, clean_spec = batch
-        masked_waveform , mask , clean_waveform = batch
-        masked_waveform = masked_waveform.squeeze(1)
-        clean_waveform =  clean_waveform.squeeze(1)
+        # masked_spec, mask, clean_spec = batch
+        masked_spec, mask, clean_spec = batch  # ignore masked_spec
 
-        masked_spec = audio_to_stft(masked_waveform,self.config.stft_configuration,self.device)
-        clean_spec = audio_to_stft(clean_waveform,self.config.stft_configuration,self.device)
-        # convert the audio into specs
-        # Forward pass through model
-        output = self.model(masked_spec, mask)
+        # 1) Normalize the clean spectrogram
+        # clean_spec_norm, clean_mean, clean_std = normalize_spectrograms(clean_spec)
 
-        # Compute loss
-        loss = torch.nn.functional.mse_loss(output, clean_spec)
+        # 2) Create the masked spectrogram from clean_spec_norm
+        #    (instead of using the masked_spec from the dataset)
+        mask = mask.unsqueeze(1).unsqueeze(2)
+        mask = mask.expand(-1, clean_spec.shape[1], clean_spec.shape[2], -1)
+        # calculate the mag of the clean and masked specs:
+        masked_spec_mag = torch.sqrt(masked_spec[:, 0, :, :] ** 2 + masked_spec[:, 1, :, :] ** 2)
+        masked_spec_mag = masked_spec_mag.unsqueeze(1)
+        clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
+        clean_spec_mag = clean_spec_mag.unsqueeze(1)
+        clean_spec_mag_log, _, _ = preprocess_log_magnitude(clean_spec_mag)
+        # clean_spec_mag_log = torch.log(clean_spec_mag)
+        # normalized clean spec mag log
+        masked_spec_mag_log = clean_spec_mag_log * mask[:, 0, :, :].unsqueeze(1)
+
+        # Concatenate mask with masked spectrogram along channel dimension
+        # model_input = torch.cat([masked_spec, mask[:,0,:,:].unsqueeze(1)], dim=1)
+
+        # masked_spec_norm = clean_spec_norm * mask
+
+        # 3) Forward pass
+        # output = self.model(masked_spec, mask)
+        output = self.model(masked_spec_mag_log, mask)
+        # Compute loss in normalized space
+        opposite_mask = 1 - mask
+        masked_loss = (torch.abs(output - clean_spec_mag_log)) * opposite_mask
+        # masked_loss = ((output - clean_spec_mag) ** 2) * mask
+        loss = masked_loss.sum() / (opposite_mask.sum() + 1e-6)
+
+        # Denormalize the output using clean spectrogram stats
+        # output = denormalize_spectrograms(output_norm, clean_mean, clean_std)
 
         # Store logs
         log = {
-            'masked_spec': masked_spec.detach(),
             'clean_spec': clean_spec.detach(),
             'output': output.detach(),
             'loss': loss.detach()
