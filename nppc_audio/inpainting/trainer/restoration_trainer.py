@@ -8,7 +8,7 @@ import json
 from tqdm.auto import tqdm
 from nppc.auxil import LoopLoader
 import matplotlib.pyplot as plt
-from nppc_audio.inpainting.networks.unet import UNetConfig, RestorationWrapper
+from nppc_audio.inpainting.networks.unet import UNetConfig, RestorationWrapper , UNet
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset, AudioInpaintingConfig
 from use_pre_trained_model.model_validator.config.schema import DataLoaderConfig
 from utils import preprocess_log_magnitude
@@ -40,7 +40,8 @@ class InpaintingTrainer(nn.Module):
         super().__init__()
         self.config = config
         # self.model = UNet(self.config.model_configuration).to(config.device)
-        self.model = RestorationWrapper(self.config.model_configuration).to(config.device)
+        base_network = UNet(self.config.model_configuration).to(self.config.device)
+        self.model = RestorationWrapper(base_network).to(config.device)
         self.device = config.device
         if config.device == 'cuda':
             # check if gpu is exist
@@ -187,7 +188,7 @@ class InpaintingTrainer(nn.Module):
             checkpoint_path: Path to save checkpoint
         """
         checkpoint = {
-            'model_state_dict': self.model.state_dict(),
+            'model_state_dict': self.model.net.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'step': self.step,
         }

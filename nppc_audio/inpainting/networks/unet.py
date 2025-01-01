@@ -187,7 +187,7 @@ class DecoderBlock(nn.Module):
 ##############################################################################
 # U-Net
 ##############################################################################
-class UNet2(nn.Module):
+class UNet(nn.Module):
     """
     6 encoder blocks, 6 decoder blocks.
     The final output is a 2D spectrogram [B, 1, F, T].
@@ -241,7 +241,7 @@ class UNet2(nn.Module):
         return out
 
 
-class UNet(nn.Module):
+class UNet2(nn.Module):
     def __init__(self):
         super(UNet, self).__init__()
         self.inc = inconv(1, 64)
@@ -270,10 +270,9 @@ class UNet(nn.Module):
 
 
 class RestorationWrapper(nn.Module):
-    def __init__(self, config: UNetConfig):
+    def __init__(self, base_net: UNet):
         super().__init__()
-        self.config = config
-        self.net = UNet()
+        self.net = base_net
 
     def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
         # input dims of the mask are [B,1,F,T]

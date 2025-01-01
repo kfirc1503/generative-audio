@@ -4,7 +4,7 @@ import hydra
 from omegaconf import DictConfig
 from pathlib import Path
 import pydantic
-from nppc_audio.inpainting.networks.unet import RestorationWrapper , UNetConfig
+from nppc_audio.inpainting.networks.unet import RestorationWrapper , UNetConfig , UNet
 from utils import preprocess_log_magnitude
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset
 #from nppc_audio.inpainting.validator.config.schema import ModelValidatorConfig
@@ -71,11 +71,14 @@ class InpaintingModelValidator:
         checkpoint_path = Path(config.checkpoint_path).absolute()
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         # self.model = RestorationWrapper(checkpoint['model'])
-        self.model = RestorationWrapper(self.config.model_configuration)
-        # self.model = RestorationWrapper(checkpoint['model_config']).to(self.device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.model.to(self.device)
-        self.model.eval()
+        base_net = UNet(config.model_configuration)
+        base_net.load_state_dict(checkpoint["model_state_dict"])
+        base_net.to(self.device)
+        base_net.eval()
+        self.model = RestorationWrapper(base_net)
+        # # might not be needed, but just in case
+        # self.model.to(self.device)
+        # self.model.eval()
 
     def validate_sample(self, masked_spec, mask, clean_spec, sample_len_seconds):
         """Validate model on a single sample"""
