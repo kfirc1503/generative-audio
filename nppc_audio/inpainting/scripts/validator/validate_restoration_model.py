@@ -32,7 +32,7 @@ def main(cfg: DictConfig):
     # Validate multiple samples
     total_mse = 0
     total_mae = 0
-    num_samples = min(10, len(dataset))  # Validate on first 10 samples
+    num_samples = min(20, len(dataset))  # Validate on first 10 samples
 
     print(f"\nValidating model from checkpoint: {config.model_validator_configuration.checkpoint_path}")
     print(f"Number of samples to validate: {num_samples}")

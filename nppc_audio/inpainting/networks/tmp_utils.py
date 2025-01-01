@@ -8,7 +8,7 @@ import torch.nn.functional as F
 class double_conv(nn.Module):
     '''(conv => BN => ReLU) * 2'''
 
-    def __init__(self, in_ch, out_ch, leaky_relu=False, dropout=0.5):
+    def __init__(self, in_ch, out_ch, leaky_relu=True, dropout=0):
         super(double_conv, self).__init__()
         layers = [
             nn.Conv2d(in_ch, out_ch, 3, padding=1),
@@ -36,7 +36,7 @@ class double_conv(nn.Module):
 
 
 class inconv(nn.Module):
-    def __init__(self, in_ch, out_ch, leaky_relu=False):
+    def __init__(self, in_ch, out_ch, leaky_relu=True):
         super(inconv, self).__init__()
         self.conv = double_conv(in_ch, out_ch, leaky_relu)
 
@@ -46,7 +46,7 @@ class inconv(nn.Module):
 
 
 class down(nn.Module):
-    def __init__(self, in_ch, out_ch, leaky_relu=False, dropout=0.5):
+    def __init__(self, in_ch, out_ch, leaky_relu=True, dropout=0):
         super(down, self).__init__()
         self.mpconv = nn.Sequential(
             nn.MaxPool2d(2),
@@ -59,7 +59,7 @@ class down(nn.Module):
 
 
 class up(nn.Module):
-    def __init__(self, in_ch, out_ch, bilinear=True, leaky_relu=False, dropout=0.5):
+    def __init__(self, in_ch, out_ch, bilinear=True, leaky_relu=True, dropout=0):
         super(up, self).__init__()
 
         #  would be a nice idea if the upsampling could be learned too,

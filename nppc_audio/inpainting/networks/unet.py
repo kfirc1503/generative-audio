@@ -187,7 +187,7 @@ class DecoderBlock(nn.Module):
 ##############################################################################
 # U-Net
 ##############################################################################
-class UNet(nn.Module):
+class UNet2(nn.Module):
     """
     6 encoder blocks, 6 decoder blocks.
     The final output is a 2D spectrogram [B, 1, F, T].
@@ -203,8 +203,10 @@ class UNet(nn.Module):
         self.enc4 = EncoderBlock(64, 128, 3)  # Block 4: (3, 128)
         self.enc5 = EncoderBlock(128, 128, 3)  # Block 5: (3, 128)
         self.enc6 = EncoderBlock(128, 128, 3)  # Block 6: (3, 128)
-
-        # Decoder (green blocks)
+        # self.enc7 = EncoderBlock(128, 256, 3)
+        #
+        # # Decoder (green blocks)
+        # self.dec7 = DecoderBlock(256, 256, 3)
         self.dec6 = DecoderBlock(128 + 128, 128, 3)  # Block 6
         self.dec5 = DecoderBlock(128 + 128, 128, 3)  # Block 5
         self.dec4 = DecoderBlock(128 + 64, 64, 3)  # Block 4
@@ -241,19 +243,20 @@ class UNet(nn.Module):
         return out
 
 
-class UNet2(nn.Module):
-    def __init__(self):
+class UNet(nn.Module):
+    def __init__(self, config: UNetConfig):
         super(UNet, self).__init__()
-        self.inc = inconv(1, 64)
+        self.config = config
+        self.inc = inconv(self.config.in_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
-        self.down3 = down(256, 512)
-        self.down4 = down(512, 512)
-        self.up1 = up(1024, 256)
-        self.up2 = up(512, 128)
+        self.down3 = down(256, 512 , dropout=0.5)
+        self.down4 = down(512, 512 , dropout=0.5)
+        self.up1 = up(1024, 256, dropout=0.5)
+        self.up2 = up(512, 128, dropout=0.5)
         self.up3 = up(256, 64)
         self.up4 = up(128, 64)
-        self.outc = outconv(64, 1)
+        self.outc = outconv(64, self.config.out_channels)
 
     def forward(self, x):
         x1 = self.inc(x)
