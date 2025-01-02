@@ -181,21 +181,15 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         # firstly we should move the spec into a mag norm log specs:
         # masked_spec, mask, clean_spec = batch
         masked_spec, mask, clean_spec = batch  # ignore masked_spec
-        mask = mask.unsqueeze(1).unsqueeze(2)
-        mask = mask.expand(-1, 1, clean_spec.shape[2], -1)
-        # calculate the mag of the clean and masked specs:
-        clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
-        clean_spec_mag = clean_spec_mag.unsqueeze(1)
-        clean_spec_mag_norm_log, _, _ = utils.preprocess_log_magnitude(clean_spec_mag)
-        masked_spec_mag_log = clean_spec_mag_norm_log * mask
-        # now we will get the pred spec mag from our pretrained restoration model
+        clean_spec_mag_norm_log, mask, masked_spec_mag_log = self._preprocess_data(clean_spec, mask)
+
         w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
-        B, n_dirs, F, T = w_mat.shape
-        w_mat_flat = w_mat.reshape(B, n_dirs, -1)  # [B,n_dirs,F*T]
-        w_norms = torch.norm(w_mat_flat, dim=-1)  # dim of [B,n_dirs]
+        w_mat_ = w_mat.flatten(2)
+        w_norms = w_mat_.norm(dim=2)
+        w_hat_mat = w_mat_ / w_norms[:, :, None]
 
         pred_spec_mag_norm_log = self.nppc_model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
-        err = (clean_spec_mag_norm_log - pred_spec_mag_norm_log).flatten(1)  # [B,1,F*T]
+        err = (clean_spec_mag_norm_log - pred_spec_mag_norm_log).flatten(1)  # [B,F*T]
 
         ## Normalizing by the error's norm
         ## -------------------------------
@@ -203,15 +197,10 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         err = err / err_norm[:, None]
         w_norms = w_norms / err_norm[:, None]
 
-        # normalized the directions:
-        w_hat_mat = w_mat_flat / (w_norms[:, :, None] + 1e-8)
         ## W hat loss
         ## ----------
-
         err_proj = torch.einsum('bki,bi->bk', w_hat_mat, err)
         reconst_err = 1 - err_proj.pow(2).sum(dim=1)
-        ## W norms loss
-        ## ------------
         second_moment_mse = (w_norms.pow(2) - err_proj.detach().pow(2)).pow(2)
         # Compute final objective with adaptive weighting
         objective = self._calculate_final_objective(reconst_err, second_moment_mse)
@@ -227,6 +216,15 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         }
 
         return reconst_err, objective, log
+
+    def _preprocess_data(self, clean_spec, mask):
+        mask = mask.unsqueeze(1).unsqueeze(2)
+        mask = mask.expand(-1, 1, clean_spec.shape[2], -1)
+        clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
+        clean_spec_mag = clean_spec_mag.unsqueeze(1)
+        clean_spec_mag_norm_log, _, _ = utils.preprocess_log_magnitude(clean_spec_mag)
+        masked_spec_mag_log = clean_spec_mag_norm_log * mask
+        return clean_spec_mag_norm_log, mask, masked_spec_mag_log
 
     def save_checkpoint(self, checkpoint_path):
         """
@@ -274,7 +272,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
     def validate(self, val_dataloader):
         """Validation loop to compute loss on the validation set"""
-        self.model.eval()
+        self.nppc_model.eval()
         val_losses = []
 
         with torch.no_grad():
@@ -283,10 +281,10 @@ class NPPCAudioInpaintingTrainer(nn.Module):
                 masked_spec, mask, clean_spec = [x.to(self.device) for x in batch]
 
                 # Get loss for this batch
-                loss, _ = self.base_step((masked_spec, mask, clean_spec))
+                loss, _ ,_ = self.base_step((masked_spec, mask, clean_spec))
                 val_losses.append(loss.item())
 
         # Calculate average validation loss
         avg_val_loss = sum(val_losses) / len(val_losses)
-        self.model.train()  # Set back to training mode
+        self.nppc_model.train()  # Set back to training mode
         return avg_val_loss

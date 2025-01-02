@@ -47,7 +47,8 @@ class AudioInpaintingPCWrapper(nn.Module):
     def __init__(self, pc_wrapper_config: AudioInpaintingPCWrapperConfig):
         super().__init__()
         self.config  = pc_wrapper_config
-        self.net = RestorationWrapper(self.config.model_configuration)
+        base_net = UNet(self.config.model_configuration)
+        self.net = RestorationWrapper(base_net)
 
 
 

@@ -283,8 +283,13 @@ class RestorationWrapper(nn.Module):
         x = self.net(x_in)
         # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
         mask_broadcasted = mask
-        if x_in.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
-            mask_broadcasted = mask_broadcasted.expand(-1, x_in.shape[1], -1,-1)  # Broadcast along the channel dimension
+        if x.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
+            mask_broadcasted = mask_broadcasted.expand(-1, x.shape[1], -1,-1)  # Broadcast along the channel dimension
         # Apply inpainting
-        x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
+        if x_in.shape[1] > 1:
+            masked_spec = x_in[:,0,:,:]
+            masked_spec = masked_spec.unsqueeze(1).expand(-1,mask_broadcasted.shape[1],-1,-1)
+            x = masked_spec * mask_broadcasted + x * (1 - mask_broadcasted)
+        else:
+            x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
         return x

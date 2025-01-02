@@ -19,10 +19,10 @@ def main(cfg: DictConfig):
         # Create dataloader for Validation
         val_dataloader = torch.utils.data.DataLoader(
             validation_dataset,
-            batch_size=config.inpainting_training_configuration.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
-            shuffle=config.inpainting_training_configuration.dataloader_configuration.shuffle,
-            num_workers=config.inpainting_training_configuration.dataloader_configuration.num_workers,
-            pin_memory=config.inpainting_training_configuration.dataloader_configuration.pin_memory
+            batch_size=config.inpainting_nppc_training_configuration.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
+            shuffle=config.inpainting_nppc_training_configuration.dataloader_configuration.shuffle,
+            num_workers=config.inpainting_nppc_training_configuration.dataloader_configuration.num_workers,
+            pin_memory=config.inpainting_nppc_training_configuration.dataloader_configuration.pin_memory
         )
 
     trainer.train(n_steps= config.n_steps, n_epochs= config.n_epochs,checkpoint_dir = config.checkpoint_dir,save_flag=True ,val_dataloader=val_dataloader)
