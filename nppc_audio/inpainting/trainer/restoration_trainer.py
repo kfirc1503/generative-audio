@@ -29,7 +29,6 @@ class InpaintingTrainerConfig(pydantic.BaseModel):
     dataloader_configuration: DataLoaderConfig
     optimizer_configuration: OptimizerConfig
     # stft_configuration: StftConfig
-    learning_rate: float = 1e-4
     device: str = "cuda"
     save_interval: int = 10
     log_interval: int = 500
@@ -103,12 +102,14 @@ class InpaintingTrainer(nn.Module):
                 f'Loss: {loss.item():.4f}'
             )
 
-            self.step += 1
             # Validation
             if val_dataloader and self.step % self.config.log_interval == 0:
                 val_loss = self.validate(val_dataloader)
                 val_loss_history.append(val_loss)
                 print(f" Validation Loss at Step {self.step}: {val_loss:.4f}")
+
+            self.step += 1
+
 
         # Plot loss curve
         self.plot_loss_curve(loss_history,val_loss_history)
@@ -257,7 +258,7 @@ class InpaintingTrainer(nn.Module):
             'training_config': {
                 'n_steps': n_steps,
                 'n_epochs': n_epochs,
-                'learning_rate': self.config.learning_rate,
+                'learning_rate': self.config.optimizer_configuration.args.get('lr'),
                 'device': self.config.device,
                 'batch_size': self.config.dataloader_configuration.batch_size
             }

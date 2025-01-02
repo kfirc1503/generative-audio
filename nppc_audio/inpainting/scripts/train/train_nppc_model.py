@@ -3,13 +3,14 @@ import torch
 from omegaconf import DictConfig
 
 from nppc_audio.inpainting.trainer.restoration_trainer import InpaintingTrainer
-from nppc_audio.inpainting.scripts.train.config.schema import Config
+from nppc_audio.inpainting.trainer.nppc_trainer import NPPCAudioInpaintingTrainer
+from nppc_audio.inpainting.scripts.train.config.schema_nppc import Config
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset,AudioInpaintingConfig
 
-@hydra.main(version_base=None, config_path="config", config_name="config")
+@hydra.main(version_base=None, config_path="config", config_name="config_nppc")
 def main(cfg: DictConfig):
     config = Config(**cfg)
-    trainer = InpaintingTrainer(config.inpainting_training_configuration)
+    trainer = NPPCAudioInpaintingTrainer(config.inpainting_nppc_training_configuration)
     val_dataloader = None
     if config.validation_data_configuration is not None:
         # Create dataset

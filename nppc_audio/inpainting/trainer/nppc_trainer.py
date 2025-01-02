@@ -23,10 +23,9 @@ from utils import OptimizerConfig, DataLoaderConfig
 class NPPCAudioInpaintingTrainerConfig(pydantic.BaseModel):
     nppc_model_configuration: NPPCModelConfig
     data_configuration: AudioInpaintingConfig
-    data_loader_configuration: DataLoaderConfig
+    dataloader_configuration: DataLoaderConfig
     optimizer_configuration: OptimizerConfig
     # output_dir: str
-    learning_rate: float = 1e-4
     device: str = "cuda"
     save_interval: int = 10
     log_interval: int = 100
@@ -34,7 +33,7 @@ class NPPCAudioInpaintingTrainerConfig(pydantic.BaseModel):
     second_moment_loss_grace: int = 500
 
 
-class NPPCAudioInpaintingTrainer(NPPCAudioTrainer):
+class NPPCAudioInpaintingTrainer(nn.Module):
     def __init__(self, config: NPPCAudioInpaintingTrainerConfig):
         super().__init__()
         self.config = config
@@ -50,10 +49,10 @@ class NPPCAudioInpaintingTrainer(NPPCAudioTrainer):
         # Create dataloader
         dataloader = torch.utils.data.DataLoader(
             dataset,
-            batch_size=config.data_loader_configuration.batch_size,  # Adjust based on your GPU memory
-            shuffle=config.data_loader_configuration.shuffle,
-            num_workers=config.data_loader_configuration.num_workers,
-            pin_memory=config.data_loader_configuration.pin_memory
+            batch_size=config.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
+            shuffle=config.dataloader_configuration.shuffle,
+            num_workers=config.dataloader_configuration.num_workers,
+            pin_memory=config.dataloader_configuration.pin_memory
         )
         self.dataloader = dataloader
         self.step = 0
@@ -65,12 +64,13 @@ class NPPCAudioInpaintingTrainer(NPPCAudioTrainer):
             **config.optimizer_configuration.args
         )
 
-    def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints", save_flag=True):
+    def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints", save_flag=True,val_dataloader=None):
         """Main training loop using LoopLoader"""
         os.makedirs(checkpoint_dir, exist_ok=True)
 
         # Initialize loss history
         loss_history = []
+        val_loss_history = []
 
         # Create loop loader
         loop_loader = LoopLoader(
@@ -105,6 +105,12 @@ class NPPCAudioInpaintingTrainer(NPPCAudioTrainer):
                 f'Reconstract Error: {reconst_err.mean().item():.4f}'
             )
 
+            # Validation
+            if val_dataloader and self.step % self.config.log_interval == 0:
+                val_loss = self.validate(val_dataloader)
+                val_loss_history.append(val_loss)
+                print(f" Validation Loss at Step {self.step}: {val_loss:.4f}")
+
             self.step += 1
 
         # Plot loss curve
@@ -122,14 +128,45 @@ class NPPCAudioInpaintingTrainer(NPPCAudioTrainer):
             self._get_and_save_metrics(checkpoint_dir, log_dict, n_epochs, n_steps, timestamp)
             self.save_checkpoint(final_checkpoint_path)
 
-    def plot_loss_curve(self, loss_history):
-        """Plot the training loss curve"""
-        plt.figure(figsize=(10, 6))
-        plt.plot(loss_history)
-        plt.xlabel('Steps')
-        plt.ylabel('Loss')
-        plt.title('Training Loss Over Time')
-        plt.grid(True)
+    # def plot_loss_curve(self, loss_history):
+    #     """Plot the training loss curve"""
+    #     plt.figure(figsize=(10, 6))
+    #     plt.plot(loss_history)
+    #     plt.xlabel('Steps')
+    #     plt.ylabel('Loss')
+    #     plt.title('Training Loss Over Time')
+    #     plt.grid(True)
+    #     plt.show()
+
+
+    def plot_loss_curve(self, loss_history, val_loss_history):
+        """Plot the training and validation loss curves with both raw and smoothed versions"""
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 12))
+
+        # Plot raw losses
+        ax1.plot(loss_history, label='Training Loss', alpha=0.5)
+        if val_loss_history:
+            # Adjust validation points to match their actual steps
+            val_steps = [i * self.config.log_interval for i in range(len(val_loss_history))]
+            ax1.plot(val_steps, val_loss_history, label='Validation Loss')
+        ax1.set_xlabel('Steps')
+        ax1.set_ylabel('Loss')
+        ax1.set_title('Raw Training and Validation Loss')
+        ax1.legend()
+        ax1.grid(True)
+
+        # Plot smoothed losses
+        smoothed_loss = self._smooth_losses(loss_history)
+        ax2.plot(smoothed_loss, label='Smoothed Training Loss')
+        if val_loss_history:
+            ax2.plot(val_steps, val_loss_history, label='Validation Loss')
+        ax2.set_xlabel('Steps')
+        ax2.set_ylabel('Loss')
+        ax2.set_title('Smoothed Training and Validation Loss')
+        ax2.legend()
+        ax2.grid(True)
+
+        plt.tight_layout()
         plt.show()
 
     def base_step(self, batch):
@@ -216,7 +253,7 @@ class NPPCAudioInpaintingTrainer(NPPCAudioTrainer):
             'training_config': {
                 'n_steps': n_steps,
                 'n_epochs': n_epochs,
-                'learning_rate': self.config.learning_rate,
+                'learning_rate': self.config.optimizer_configuration.args.get('lr'),
                 'device': self.config.device,
                 'batch_size': self.config.dataloader_configuration.batch_size
             }
@@ -234,3 +271,22 @@ class NPPCAudioInpaintingTrainer(NPPCAudioTrainer):
         second_moment_loss_lambda *= self.config.second_moment_loss_lambda
         objective = reconst_err.mean() + second_moment_loss_lambda * second_moment_mse.mean()
         return objective
+
+    def validate(self, val_dataloader):
+        """Validation loop to compute loss on the validation set"""
+        self.model.eval()
+        val_losses = []
+
+        with torch.no_grad():
+            for batch in val_dataloader:
+                # Move batch to device
+                masked_spec, mask, clean_spec = [x.to(self.device) for x in batch]
+
+                # Get loss for this batch
+                loss, _ = self.base_step((masked_spec, mask, clean_spec))
+                val_losses.append(loss.item())
+
+        # Calculate average validation loss
+        avg_val_loss = sum(val_losses) / len(val_losses)
+        self.model.train()  # Set back to training mode
+        return avg_val_loss
