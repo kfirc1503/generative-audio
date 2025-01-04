@@ -74,6 +74,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         loss_history = []
         reconst_err_history = []
         val_loss_history = []
+        val_reconst_err_history = []
 
         # Create loop loader
         loop_loader = LoopLoader(
@@ -115,9 +116,12 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
             # Validation
             if val_dataloader and self.step % self.config.log_interval == 0:
-                val_loss = self.validate(val_dataloader)
+                val_loss , val_reconst_err = self.validate(val_dataloader)
                 val_loss_history.append(val_loss)
-                print(f" Validation Loss at Step {self.step}: {val_loss:.4f}")
+                val_reconst_err_history.append(val_reconst_err)
+                print(f" | Validation objective at Step {self.step}: {val_loss:.4f}")
+                print(f" | Validation Reconstract Error at Step {self.step}: {val_reconst_err:.4f}")
+
 
             self.step += 1
 
@@ -210,10 +214,10 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         ## ----------
         err_proj = torch.einsum('bki,bi->bk', w_hat_mat, err)
         reconst_err = 1 - err_proj.pow(2).sum(dim=1)
-        w_norms_cpu = w_norms.detach().cpu()
-        err_proj_cpu = err_proj.detach().cpu()
+        # w_norms_cpu = w_norms.detach().cpu()
+        # err_proj_cpu = err_proj.detach().cpu()
         second_moment_mse = (w_norms.pow(2) - err_proj.detach().pow(2)).pow(2)
-        second_moment_mse_cpu = second_moment_mse.mean().detach().cpu()
+        # second_moment_mse_cpu = second_moment_mse.mean().detach().cpu()
         # Compute final objective with adaptive weighting
         objective = self._calculate_final_objective(reconst_err, second_moment_mse)
         # Store logs
@@ -246,7 +250,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             checkpoint_path: Path to save checkpoint
         """
         checkpoint = {
-            'model_state_dict': self.model.state_dict(),
+            'model_state_dict': self.nppc_model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'step': self.step,
         }
@@ -265,7 +269,12 @@ class NPPCAudioInpaintingTrainer(nn.Module):
                 'n_epochs': n_epochs,
                 'learning_rate': self.config.optimizer_configuration.args.get('lr'),
                 'device': self.config.device,
-                'batch_size': self.config.dataloader_configuration.batch_size
+                'batch_size': self.config.dataloader_configuration.batch_size,
+                'audio_len': self.config.data_configuration.sub_sample_length_seconds,
+                'missing_length_seconds': self.config.data_configuration.missing_length_seconds,
+                'missing_start_seconds': self.config.data_configuration.missing_start_seconds,
+                'nfft': self.config.data_configuration.stft_configuration.nfft,
+                'n_dirs' : self.config.nppc_model_configuration.audio_pc_wrapper_configuration.n_dirs
             }
         }
         metrics_path = os.path.join(
@@ -277,7 +286,9 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
     def _calculate_final_objective(self, reconst_err, second_moment_mse):
         second_moment_loss_lambda = -1 + 2 * self.step / self.config.second_moment_loss_grace
-        second_moment_loss_lambda = max(min(second_moment_loss_lambda, 1), 1e-6)
+        # second_moment_loss_lambda = max(min(second_moment_loss_lambda, 1), 1e-2)
+        second_moment_loss_lambda = 1
+
         second_moment_loss_lambda *= self.config.second_moment_loss_lambda
         objective = reconst_err.mean() + second_moment_loss_lambda * second_moment_mse.mean()
         return objective
@@ -286,18 +297,33 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         """Validation loop to compute loss on the validation set"""
         self.nppc_model.eval()
         val_losses = []
-
+        val_reconst_err = []
         with torch.no_grad():
             for batch in val_dataloader:
                 # Move batch to device
                 masked_spec, mask, clean_spec = [x.to(self.device) for x in batch]
 
                 # Get loss for this batch
-                _, objective ,_ = self.base_step((masked_spec, mask, clean_spec))
+                reconst_err, objective ,_ = self.base_step((masked_spec, mask, clean_spec))
                 val_losses.append(objective.item())
-
-        # Calculate average validation loss
+                val_reconst_err.append(reconst_err.mean().item())       # Calculate average validation loss
         avg_val_loss = sum(val_losses) / len(val_losses)
+        avg_val_reconst_err = sum(val_reconst_err) / len(val_reconst_err)
         self.nppc_model.train()  # Set back to training mode
-        return avg_val_loss
+        return avg_val_loss , avg_val_reconst_err
+
+    def _smooth_losses(self, losses, window_size=100):
+        """
+        Smooth losses using moving average
+        Args:
+            losses: List of loss values
+            window_size: Size of the moving average window
+        Returns:
+            Smoothed loss values
+        """
+        smoothed = []
+        for i in range(len(losses)):
+            start_idx = max(0, i - window_size + 1)
+            smoothed.append(sum(losses[start_idx:(i + 1)]) / (i - start_idx + 1))
+        return smoothed
 
