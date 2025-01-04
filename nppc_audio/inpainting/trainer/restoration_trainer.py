@@ -260,7 +260,11 @@ class InpaintingTrainer(nn.Module):
                 'n_epochs': n_epochs,
                 'learning_rate': self.config.optimizer_configuration.args.get('lr'),
                 'device': self.config.device,
-                'batch_size': self.config.dataloader_configuration.batch_size
+                'batch_size': self.config.dataloader_configuration.batch_size,
+                'audio_len' : self.config.data_configuration.sub_sample_length_seconds,
+                'missing_length_seconds' : self.config.data_configuration.missing_length_seconds,
+                'missing_start_seconds' : self.config.data_configuration.missing_start_seconds,
+                'nfft' : self.config.data_configuration.stft_configuration.nfft
             }
         }
         metrics_path = os.path.join(

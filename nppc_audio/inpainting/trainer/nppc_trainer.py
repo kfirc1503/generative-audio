@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
 from typing import Literal
 import pydantic
 import torch.optim as optim
@@ -31,7 +33,7 @@ class NPPCAudioInpaintingTrainerConfig(pydantic.BaseModel):
     log_interval: int = 100
     second_moment_loss_lambda: float = 1.0
     second_moment_loss_grace: int = 500
-
+    max_grad_norm: float = 1.0
 
 class NPPCAudioInpaintingTrainer(nn.Module):
     def __init__(self, config: NPPCAudioInpaintingTrainerConfig):
@@ -70,6 +72,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         # Initialize loss history
         loss_history = []
+        reconst_err_history = []
         val_loss_history = []
 
         # Create loop loader
@@ -90,10 +93,15 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             reconst_err, objective, log_dict = self.base_step(batch)
             self.optimizer.zero_grad()
             objective.backward()
+
+            # Apply gradient clipping
+            torch.nn.utils.clip_grad_norm_(self.nppc_model.parameters(), max_norm=self.config.max_grad_norm)
+
             self.optimizer.step()
 
             # Store loss
             loss_history.append(objective.item())
+            reconst_err_history.append(reconst_err.mean().item())
 
             # Update progress bar
             pbar.set_description(
@@ -183,9 +191,10 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         masked_spec, mask, clean_spec = batch  # ignore masked_spec
         clean_spec_mag_norm_log, mask, masked_spec_mag_log = self._preprocess_data(clean_spec, mask)
 
+
         w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
         w_mat_ = w_mat.flatten(2)
-        w_norms = w_mat_.norm(dim=2)
+        w_norms = w_mat_.norm(dim=2) + 1e-6
         w_hat_mat = w_mat_ / w_norms[:, :, None]
 
         pred_spec_mag_norm_log = self.nppc_model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
@@ -193,7 +202,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         ## Normalizing by the error's norm
         ## -------------------------------
-        err_norm = err.norm(dim=1)
+        err_norm = err.norm(dim=1) +1e-6
         err = err / err_norm[:, None]
         w_norms = w_norms / err_norm[:, None]
 
@@ -201,7 +210,10 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         ## ----------
         err_proj = torch.einsum('bki,bi->bk', w_hat_mat, err)
         reconst_err = 1 - err_proj.pow(2).sum(dim=1)
+        w_norms_cpu = w_norms.detach().cpu()
+        err_proj_cpu = err_proj.detach().cpu()
         second_moment_mse = (w_norms.pow(2) - err_proj.detach().pow(2)).pow(2)
+        second_moment_mse_cpu = second_moment_mse.mean().detach().cpu()
         # Compute final objective with adaptive weighting
         objective = self._calculate_final_objective(reconst_err, second_moment_mse)
         # Store logs
@@ -281,10 +293,11 @@ class NPPCAudioInpaintingTrainer(nn.Module):
                 masked_spec, mask, clean_spec = [x.to(self.device) for x in batch]
 
                 # Get loss for this batch
-                loss, _ ,_ = self.base_step((masked_spec, mask, clean_spec))
-                val_losses.append(loss.item())
+                _, objective ,_ = self.base_step((masked_spec, mask, clean_spec))
+                val_losses.append(objective.item())
 
         # Calculate average validation loss
         avg_val_loss = sum(val_losses) / len(val_losses)
         self.nppc_model.train()  # Set back to training mode
         return avg_val_loss
+

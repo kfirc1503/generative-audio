@@ -1,4 +1,4 @@
-n_epochs: 10
+n_epochs: 30
 checkpoint_dir: "../../../../FullSubNet_plus/data/inpainting/nppc_model/checkpoint"
 inpainting_nppc_training_configuration:
   device: "cuda"
@@ -8,10 +8,10 @@ inpainting_nppc_training_configuration:
       out_channels: 1
     pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250101_202345.pt"
     audio_pc_wrapper_configuration:
-      n_dirs: 5
+      n_dirs: 32
       model_configuration:
         in_channels: 2
-        out_channels: 5
+        out_channels: 32
     device: "cuda"
 
 
@@ -20,11 +20,11 @@ inpainting_nppc_training_configuration:
     clean_path: "../../../../FullSubNet_plus/data/clean/train"
     sample_rate: 16000
     missing_length_seconds: 0.128
-    missing_start_seconds: 0.4
+    missing_start_seconds: 0.25
     # Adjust the sub_sample_length_seconds to get exactly T=512:
 #    sub_sample_length_seconds: 8.176
 #    sub_sample_length_seconds: 4.088
-    sub_sample_length_seconds: 1.022
+    sub_sample_length_seconds: 0.511
     target_dB_FS: -25.0
     stft_configuration:
       nfft: 255
@@ -32,9 +32,9 @@ inpainting_nppc_training_configuration:
       hop_length: 128
 
   dataloader_configuration:
-    batch_size: 64
+    batch_size: 16
     shuffle: true
-    num_workers: 64
+    num_workers: 16
     pin_memory: false
 
   optimizer_configuration:
@@ -47,17 +47,17 @@ inpainting_nppc_training_configuration:
 
 
 
-validation_data_configuration:
-  clean_path: "../../../../FullSubNet_plus/data/clean/test"
-  sample_rate: 16000
-  missing_length_seconds: 0.128
-  missing_start_seconds: 0.4
-  # Adjust the sub_sample_length_seconds to get exactly T=512:
-#    sub_sample_length_seconds: 8.176
-#    sub_sample_length_seconds: 4.088
-  sub_sample_length_seconds: 1.022
-  target_dB_FS: -25.0
-  stft_configuration:
-    nfft: 255
-    win_length: 255
-    hop_length: 128
+#validation_data_configuration:
+#  clean_path: "../../../../FullSubNet_plus/data/clean/test"
+#  sample_rate: 16000
+#  missing_length_seconds: 0.128
+#  missing_start_seconds: 0.4
+#  # Adjust the sub_sample_length_seconds to get exactly T=512:
+##    sub_sample_length_seconds: 8.176
+##    sub_sample_length_seconds: 4.088
+#  sub_sample_length_seconds: 1.022
+#  target_dB_FS: -25.0
+#  stft_configuration:
+#    nfft: 255
+#    win_length: 255
+#    hop_length: 128
