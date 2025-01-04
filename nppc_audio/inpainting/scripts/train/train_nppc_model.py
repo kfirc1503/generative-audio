@@ -25,7 +25,7 @@ def main(cfg: DictConfig):
             pin_memory=config.inpainting_nppc_training_configuration.dataloader_configuration.pin_memory
         )
 
-    trainer.train(n_steps= config.n_steps, n_epochs= config.n_epochs,checkpoint_dir = config.checkpoint_dir,save_flag=False ,val_dataloader=val_dataloader)
+    trainer.train(n_steps= config.n_steps, n_epochs= config.n_epochs,checkpoint_dir = config.checkpoint_dir,save_flag=True ,val_dataloader=val_dataloader)
 
 if __name__ == "__main__":
     main()

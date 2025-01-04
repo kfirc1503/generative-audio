@@ -122,7 +122,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             self.step += 1
 
         # Plot loss curve
-        self.plot_loss_curve(loss_history)
+        self.plot_loss_curve(loss_history, val_loss_history)
 
         if save_flag:
             # Save final checkpoint
