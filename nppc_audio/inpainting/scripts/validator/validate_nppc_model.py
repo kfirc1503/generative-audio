@@ -20,32 +20,31 @@ class Config(pydantic.BaseModel):
 def main(cfg: DictConfig):
     # Create validator config
     config = Config(**cfg)
-    config = NPPCModelValidatorConfig(**cfg.model_validator_configuration)
 
     # Create validator
     validator = NPPCModelValidator(config.model_validator_configuration)
 
     # Create dataset
-    dataset = AudioInpaintingDataset(cfg.data_configuration)
+    dataset = AudioInpaintingDataset(config.data_configuration)
 
     # Create dataloader for Validation
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,  # Always use batch size 1 for validation
         shuffle=False,
-        num_workers=cfg.dataloader_configuration.num_workers,
-        pin_memory=cfg.dataloader_configuration.pin_memory
+        num_workers=config.dataloader_configuration.num_workers,
+        pin_memory=config.dataloader_configuration.pin_memory
     )
 
     # Validate multiple samples
     num_samples = min(cfg.num_samples_to_validate, len(dataset))
 
-    print(f"\nValidating NPPC model from checkpoint: {config.checkpoint_path}")
+    print(f"\nValidating NPPC model from checkpoint: {config.model_validator_configuration.checkpoint_path}")
     print(f"Number of samples to validate: {num_samples}")
-    print(f"Number of PC directions to plot: {config.max_dirs_to_plot if config.max_dirs_to_plot else 'all'}")
+    print(f"Number of PC directions to plot: {config.model_validator_configuration.max_dirs_to_plot if config.model_validator_configuration.max_dirs_to_plot else 'all'}")
     print("\nProcessing samples...")
 
-    save_dir = Path(config.save_dir)
+    save_dir = Path(config.model_validator_configuration.save_dir)
     save_dir.mkdir(exist_ok=True, parents=True)
 
     for i, (masked_spec, mask, clean_spec) in enumerate(dataloader):
@@ -58,7 +57,7 @@ def main(cfg: DictConfig):
             masked_spec,
             mask,
             clean_spec,
-            cfg.data_configuration.sub_sample_length_seconds
+            config.data_configuration.sub_sample_length_seconds
         )
 
         # Save plot

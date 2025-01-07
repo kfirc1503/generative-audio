@@ -94,7 +94,6 @@ class NPPCModelValidator:
             masked_spec = masked_spec.to(self.device)
             mask = mask.to(self.device)
             clean_spec = clean_spec.to(self.device)
-            clean_spec_mag_norm, mean, std = preprocess_log_magnitude(clean_spec)
             mask_broadcast = mask.unsqueeze(1).unsqueeze(2)
             mask_broadcast = mask_broadcast.expand(-1, 1, clean_spec.shape[2], -1)
             clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
