@@ -63,7 +63,8 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         optimizer_class = getattr(optim, config.optimizer_configuration.type)
         self.optimizer = optimizer_class(
             self.nppc_model.parameters(),
-            **config.optimizer_configuration.args
+            **config.optimizer_configuration.args,
+            weight_decay=1e-4
         )
 
     def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints", save_flag=True,val_dataloader=None):
@@ -193,7 +194,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         # firstly we should move the spec into a mag norm log specs:
         # masked_spec, mask, clean_spec = batch
         masked_spec, mask, clean_spec = batch  # ignore masked_spec
-        clean_spec_mag_norm_log, mask, masked_spec_mag_log = self._preprocess_data(clean_spec, mask)
+        clean_spec_mag_norm_log, mask, masked_spec_mag_log = self.preprocess_data(clean_spec, mask)
 
 
         w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
@@ -233,7 +234,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         return reconst_err, objective, log
 
-    def _preprocess_data(self, clean_spec, mask):
+    def preprocess_data(self, clean_spec, mask):
         mask = mask.unsqueeze(1).unsqueeze(2)
         mask = mask.expand(-1, 1, clean_spec.shape[2], -1)
         clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)

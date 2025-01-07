@@ -1,0 +1,37 @@
+# Number of samples to validate
+num_samples_to_validate: 5
+
+# Model validator configuration
+model_validator_configuration:
+  checkpoint_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250106_232351.pt"
+  device: "cuda"
+  save_dir: "validation_results"
+  max_dirs_to_plot: 16  # Set to null to plot all directions
+  model_configuration:
+    pretrained_restoration_model_configuration:
+      in_channels: 1
+      out_channels: 1
+    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250106_005716.pt"
+    audio_pc_wrapper_configuration:
+      n_dirs: 64
+      model_configuration:
+        in_channels: 2
+        out_channels: 64
+
+# Data configuration
+data_configuration:
+  clean_path: "../../../../FullSubNet_plus/data/clean/test"
+  sample_rate: 16000
+  missing_length_seconds: 0.128
+  missing_start_seconds: 0.1
+  sub_sample_length_seconds: 0.2555
+  target_dB_FS: -25.0
+  stft_configuration:
+    nfft: 127
+    win_length: 127
+    hop_length: 64
+
+# Dataloader configuration
+dataloader_configuration:
+  num_workers: 4
+  pin_memory: false
