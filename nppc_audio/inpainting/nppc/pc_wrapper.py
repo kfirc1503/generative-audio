@@ -67,13 +67,22 @@ class AudioInpaintingPCWrapper(nn.Module):
         super().__init__()
         self.config  = pc_wrapper_config
         base_net = UNet(self.config.model_configuration)
-        self.net = RestorationWrapper(base_net)
+        # self.net = RestorationWrapper(base_net)
+        self.net = base_net
 
 
 
     def forward(self, mag_spec: torch.Tensor, mask: torch.Tensor):
         # Get predictions from base network (returns [B, n_dirs, F, T])
-        alternatives_pred = self.net(mag_spec, mask)
+        alternatives_pred = self.net(mag_spec)
+        mask_broadcasted = mask
+        if alternatives_pred.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
+            mask_broadcasted = mask_broadcasted.expand(-1, alternatives_pred.shape[1], -1,-1)  # Broadcast along the channel dimension
+        # Apply inpainting
+        alternatives_pred = alternatives_pred * (1 - mask_broadcasted)
+        tmp = alternatives_pred.detach().cpu().numpy()
         # Apply Gram-Schmidt orthogonalization
         w_mat = gram_schmidt_to_spec_mag(alternatives_pred)
+        tmp2 = w_mat.detach().cpu().numpy()
+
         return w_mat

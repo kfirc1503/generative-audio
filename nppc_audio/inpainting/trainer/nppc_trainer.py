@@ -239,8 +239,13 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         mask = mask.expand(-1, 1, clean_spec.shape[2], -1)
         clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
         clean_spec_mag = clean_spec_mag.unsqueeze(1)
-        clean_spec_mag_norm_log, _, _ = utils.preprocess_log_magnitude(clean_spec_mag)
+        # clean_spec_mag_norm_log, _, _ = utils.preprocess_log_magnitude(clean_spec_mag)
+        # masked_spec_mag_log = clean_spec_mag_norm_log * mask
+
+
+        clean_spec_mag_norm_log = 20*torch.log10(clean_spec_mag + 1e-6)
         masked_spec_mag_log = clean_spec_mag_norm_log * mask
+
         return clean_spec_mag_norm_log, mask, masked_spec_mag_log
 
     def save_checkpoint(self, checkpoint_path):
@@ -287,8 +292,8 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
     def _calculate_final_objective(self, reconst_err, second_moment_mse):
         second_moment_loss_lambda = -1 + 2 * self.step / self.config.second_moment_loss_grace
-        # second_moment_loss_lambda = max(min(second_moment_loss_lambda, 1), 1e-2)
-        second_moment_loss_lambda = 1
+        second_moment_loss_lambda = max(min(second_moment_loss_lambda, 1), 1e-6)
+        # second_moment_loss_lambda = 1
 
         second_moment_loss_lambda *= self.config.second_moment_loss_lambda
         objective = reconst_err.mean() + second_moment_loss_lambda * second_moment_mse.mean()

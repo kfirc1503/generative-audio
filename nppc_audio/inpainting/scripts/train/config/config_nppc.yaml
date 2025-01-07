@@ -1,4 +1,4 @@
-n_epochs: 5
+n_epochs: 12
 checkpoint_dir: "../../../../FullSubNet_plus/data/inpainting/nppc_model/checkpoint"
 inpainting_nppc_training_configuration:
   device: "cuda"
@@ -11,14 +11,14 @@ inpainting_nppc_training_configuration:
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250101_202345.pt"
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250104_194616.pt"
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250105_201001.pt"
-    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250106_005716.pt"
+    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250107_042608.pt"
 
 
     audio_pc_wrapper_configuration:
-      n_dirs: 64
+      n_dirs: 8
       model_configuration:
         in_channels: 2
-        out_channels: 64
+        out_channels: 8
     device: "cuda"
 
 

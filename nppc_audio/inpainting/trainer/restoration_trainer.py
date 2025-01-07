@@ -92,6 +92,10 @@ class InpaintingTrainer(nn.Module):
             loss, log_dict = self.base_step(batch)
             self.optimizer.zero_grad()
             loss.backward()
+
+            # Apply gradient clipping
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5)
+
             self.optimizer.step()
 
             # Store loss
@@ -181,8 +185,10 @@ class InpaintingTrainer(nn.Module):
         # calculate the mag of the clean and masked specs:
         clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
         clean_spec_mag = clean_spec_mag.unsqueeze(1)
-        clean_spec_mag_log, _, _ = preprocess_log_magnitude(clean_spec_mag)
+        # clean_spec_mag_log, _, _ = preprocess_log_magnitude(clean_spec_mag)
         # clean_spec_mag_log = torch.log(clean_spec_mag)
+        clean_spec_mag_log = 20*torch.log10(clean_spec_mag + 1e-6) # db
+
         # normalized clean spec mag log
         masked_spec_mag_log = clean_spec_mag_log * mask[:, 0, :, :].unsqueeze(1)
 
