@@ -31,7 +31,7 @@ def main(cfg: DictConfig):
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,  # Always use batch size 1 for validation
-        shuffle=False,
+        shuffle=config.dataloader_configuration.shuffle,
         num_workers=config.dataloader_configuration.num_workers,
         pin_memory=config.dataloader_configuration.pin_memory
     )
@@ -57,7 +57,8 @@ def main(cfg: DictConfig):
             masked_spec,
             mask,
             clean_spec,
-            config.data_configuration.sub_sample_length_seconds
+            config.data_configuration.sub_sample_length_seconds,
+            i
         )
 
         # Save plot

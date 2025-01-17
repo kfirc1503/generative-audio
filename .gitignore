@@ -1431,4 +1431,6 @@ nppc_audio/scripts/checkpoints
 nppc_audio/scripts/outputs
 nppc_audio/scripts/validator/outputs
 nppc_audio/scripts/train/outputs
+nppc_audio/inpainting/scripts/validator/validation_nppc_results
+nppc_audio/inpainting/scripts/validator/validation_results
 #./FullSubNet_plus/.idea

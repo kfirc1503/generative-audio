@@ -250,13 +250,30 @@ class UNet(nn.Module):
         self.inc = inconv(self.config.in_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
-        self.down3 = down(256, 512 , dropout=0.5)
-        self.down4 = down(512, 512 , dropout=0.5)
-        self.up1 = up(1024, 256, dropout=0.5)
-        self.up2 = up(512, 128, dropout=0.5)
+        self.down3 = down(256, 512 , dropout=0)
+        self.down4 = down(512, 512 , dropout=0)
+        self.up1 = up(1024, 256, dropout=0)
+        self.up2 = up(512, 128, dropout=0)
         self.up3 = up(256, 64)
         self.up4 = up(128, 64)
         self.outc = outconv(64, self.config.out_channels)
+
+
+        # x = 4
+        # self.inc = inconv(self.config.in_channels, x)
+        # self.down1 = down(x, 2*x)
+        # self.down2 = down(2*x, 4*x)
+        # self.down3 = down(4*x, 8*x , dropout=0)
+        # self.down4 = down(8*x, 8*x , dropout=0)
+        # self.up1 = up(16*x, 4*x, dropout=0)
+        # self.up2 = up(8*x, 2*x, dropout=0)
+        # self.up3 = up(4*x, x)
+        # self.up4 = up(2*x, x)
+        # self.outc = outconv(x, self.config.out_channels)
+
+
+
+
 
     def forward(self, x):
         x1 = self.inc(x)

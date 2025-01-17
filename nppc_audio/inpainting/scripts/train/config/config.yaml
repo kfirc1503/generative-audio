@@ -13,8 +13,8 @@ inpainting_training_configuration:
   data_configuration:
     clean_path: "../../../../FullSubNet_plus/data/clean/train"
     sample_rate: 16000
-    missing_length_seconds: 0.128
-    missing_start_seconds: 0.4
+    missing_length_seconds: 0.45
+    missing_start_seconds: 0.2
     # Adjust the sub_sample_length_seconds to get exactly T=512:
 #    sub_sample_length_seconds: 8.176
 #    sub_sample_length_seconds: 4.088
@@ -26,9 +26,9 @@ inpainting_training_configuration:
       hop_length: 128
 
   dataloader_configuration:
-    batch_size: 64
+    batch_size: 128
     shuffle: true
-    num_workers: 16
+    num_workers: 32
     pin_memory: false
 
   optimizer_configuration:

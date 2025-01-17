@@ -283,3 +283,20 @@ def preprocess_log_magnitude(magnitude, eps=1e-6):
     # normalized_log_mag = log_mag
     normalized_log_mag = (log_mag - mean) / std
     return normalized_log_mag, mean, std
+
+
+def preprocess_data(clean_spec, masked_spec, mask , plot_mean_std = False):
+    mask = mask.unsqueeze(1).unsqueeze(2)
+    mask = mask.expand(-1, 1, clean_spec.shape[2], -1)
+    clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
+    clean_spec_mag = clean_spec_mag.unsqueeze(1)
+    masked_spec_mag = torch.sqrt(masked_spec[:, 0, :, :] ** 2 + masked_spec[:, 1, :, :] ** 2)
+    masked_spec_mag = masked_spec_mag.unsqueeze(1)
+    clean_spec_mag_norm_log, mean, std = preprocess_log_magnitude(clean_spec_mag)
+    masked_spec_mag_log = torch.log(masked_spec_mag + 1e-6)
+    masked_spec_mag_norm_log = (masked_spec_mag_log - mean ) / std
+    if plot_mean_std:
+        return clean_spec_mag_norm_log, mask, masked_spec_mag_norm_log , mean, std
+    return clean_spec_mag_norm_log, mask, masked_spec_mag_norm_log
+
+

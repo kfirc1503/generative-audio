@@ -1,4 +1,4 @@
-n_epochs: 10
+n_epochs: 8
 checkpoint_dir: "../../../../FullSubNet_plus/data/inpainting/nppc_model/checkpoint"
 inpainting_nppc_training_configuration:
   device: "cuda"
@@ -12,23 +12,24 @@ inpainting_nppc_training_configuration:
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250104_194616.pt"
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250105_201001.pt"
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250108_003758.pt"
-    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250109_171047.pt"
+    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250110_214154.pt"
+#    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250111_010610.pt"
 
 
 
     audio_pc_wrapper_configuration:
-      n_dirs: 5
+      n_dirs: 8
       model_configuration:
         in_channels: 2
-        out_channels: 5
+        out_channels: 8
     device: "cuda"
 
 
 
   data_configuration:
-    clean_path: "../../../../FullSubNet_plus/data/clean/tmp"
+    clean_path: "../../../../FullSubNet_plus/data/clean/train"
     sample_rate: 16000
-    missing_length_seconds: 0.128
+    missing_length_seconds: 0.256
     missing_start_seconds: 0.4
     # Adjust the sub_sample_length_seconds to get exactly T=512:
 #    sub_sample_length_seconds: 8.176
@@ -56,17 +57,17 @@ inpainting_nppc_training_configuration:
 
 
 
-#validation_data_configuration:
-#  clean_path: "../../../../FullSubNet_plus/data/clean/test"
-#  sample_rate: 16000
-#  missing_length_seconds: 0.128
-#  missing_start_seconds: 0.4
-#  # Adjust the sub_sample_length_seconds to get exactly T=512:
-##    sub_sample_length_seconds: 8.176
-##    sub_sample_length_seconds: 4.088
-#  sub_sample_length_seconds: 1.022
-#  target_dB_FS: -25.0
-#  stft_configuration:
-#    nfft: 255
-#    win_length: 255
-#    hop_length: 128
+validation_data_configuration:
+  clean_path: "../../../../FullSubNet_plus/data/clean/test"
+  sample_rate: 16000
+  missing_length_seconds: 0.256
+  missing_start_seconds: 0.4
+  # Adjust the sub_sample_length_seconds to get exactly T=512:
+#    sub_sample_length_seconds: 8.176
+#    sub_sample_length_seconds: 4.088
+  sub_sample_length_seconds: 1.022
+  target_dB_FS: -25.0
+  stft_configuration:
+    nfft: 255
+    win_length: 255
+    hop_length: 128

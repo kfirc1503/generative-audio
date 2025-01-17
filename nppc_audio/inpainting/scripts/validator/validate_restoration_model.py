@@ -42,8 +42,8 @@ def main(cfg: DictConfig):
         if i >= num_samples:
             break
 
-        mask = mask.unsqueeze(1).unsqueeze(2)
-        mask = mask.expand(-1, clean_spec.shape[1], clean_spec.shape[2], -1)
+        # mask = mask.unsqueeze(1).unsqueeze(2)
+        # mask = mask.expand(-1, clean_spec.shape[1], clean_spec.shape[2], -1)
 
         results = validator.validate_sample(
             masked_spec,
@@ -53,7 +53,7 @@ def main(cfg: DictConfig):
         )
 
         total_mse += results['mse']
-        total_mae += results['mae']
+        # total_mae += results['mae']
 
         # Save individual sample results
         save_dir = Path(config.model_validator_configuration.save_dir)
@@ -62,16 +62,16 @@ def main(cfg: DictConfig):
 
         print(f"Sample {i}:")
         print(f"  MSE: {results['mse']:.6f}")
-        print(f"  MAE: {results['mae']:.6f}")
+        # print(f"  MAE: {results['mae']:.6f}")
         print()
 
     # Calculate and print average metrics
     avg_mse = total_mse / num_samples
-    avg_mae = total_mae / num_samples
+    # avg_mae = total_mae / num_samples
 
     print("\nValidation Results:")
     print(f"Average MSE across {num_samples} samples: {avg_mse:.6f}")
-    print(f"Average MAE across {num_samples} samples: {avg_mae:.6f}")
+    # print(f"Average MAE across {num_samples} samples: {avg_mae:.6f}")
     print(f"\nResults saved in: {config.model_validator_configuration.save_dir}")
 
 

@@ -13,7 +13,7 @@ from nppc_audio.inpainting.networks.unet import UNetConfig, RestorationWrapper ,
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset, AudioInpaintingConfig
 from use_pre_trained_model.model_validator.config.schema import DataLoaderConfig
 from utils import preprocess_log_magnitude
-
+import utils
 
 # Preprocessing and Postprocessing utilities
 
@@ -51,16 +51,15 @@ class InpaintingTrainer(nn.Module):
         dataset = AudioInpaintingDataset(config.data_configuration)
         print(f"Total sample pairs in dataset: {len(dataset)}")
 
-        # self.dataloader = torch.utils.data.DataLoader(
-        #     dataset,
-        #     batch_size=config.dataloader_configuration.batch_size,
-        #     shuffle=config.dataloader_configuration.shuffle,
-        #     num_workers=config.dataloader_configuration.num_workers,
-        #     pin_memory=config.dataloader_configuration.pin_memory
-        # )
+        self.dataloader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=config.dataloader_configuration.batch_size,
+            shuffle=config.dataloader_configuration.shuffle,
+            num_workers=config.dataloader_configuration.num_workers,
+            pin_memory=config.dataloader_configuration.pin_memory
+        )
         self.step = 0
-        self.dataloader = self._mnist_dataloader()
-        self.mask = self._mask_for_mnist()
+
 
         # Initialize optimizer
         optimizer_class = getattr(optim, config.optimizer_configuration.type)
@@ -88,8 +87,8 @@ class InpaintingTrainer(nn.Module):
         pbar = tqdm(loop_loader, total=len(loop_loader))
         for batch in pbar:
             # Move batch to device
-            # masked_spec, mask, clean_spec = [x.to(self.device) for x in batch]
-            # batch = (masked_spec, mask, clean_spec)
+            masked_spec, mask, clean_spec = [x.to(self.device) for x in batch]
+            batch = (masked_spec, mask, clean_spec)
 
             # Forward and backward pass
             loss, log_dict = self.base_step(batch)
@@ -176,59 +175,31 @@ class InpaintingTrainer(nn.Module):
         plt.tight_layout()
         plt.show()
 
-    # def base_step(self, batch):
-    #     """Base training step for inpainting using a mask created from clean_spec."""
-    #     # We now ignore the masked_spec from the dataset;
-    #     # we generate our own masked_spec_norm from clean_spec_norm.
-    #
-    #     # masked_spec, mask, clean_spec = batch
-    #     masked_spec, mask, clean_spec = batch  # ignore masked_spec
-    #     mask = mask.unsqueeze(1).unsqueeze(2)
-    #     mask = mask.expand(-1, clean_spec.shape[1], clean_spec.shape[2], -1)
-    #     # calculate the mag of the clean and masked specs:
-    #     clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
-    #     clean_spec_mag = clean_spec_mag.unsqueeze(1)
-    #     masked_spec_mag = torch.sqrt(masked_spec[:, 0, :, :] ** 2 + masked_spec[:, 1, :, :] ** 2)
-    #     masked_spec_mag = masked_spec_mag.unsqueeze(1)
-    #     masked_spec_mag_log = 20*torch.log10(masked_spec_mag + 1e-6)
-    #     # clean_spec_mag_log, _, _ = preprocess_log_magnitude(clean_spec_mag)
-    #     # clean_spec_mag_log = torch.log(clean_spec_mag)
-    #     clean_spec_mag_log = 20*torch.log10(clean_spec_mag + 1e-6) # db
-    #     output = self.model(masked_spec_mag_log, mask)
-    #     # Compute loss in normalized space
-    #     opposite_mask = 1 - mask
-    #     masked_loss = ((torch.abs(output - clean_spec_mag_log)) ** 2) * opposite_mask
-    #
-    #     # masked_loss = ((output - clean_spec_mag) ** 2) * mask
-    #     loss = masked_loss.sum() / (opposite_mask.sum() + 1e-6)
-    #
-    #     # Denormalize the output using clean spectrogram stats
-    #     # output = denormalize_spectrograms(output_norm, clean_mean, clean_std)
-    #
-    #     # Store logs
-    #     log = {
-    #         'clean_spec': clean_spec.detach(),
-    #         'output': output.detach(),
-    #         'loss': loss.detach()
-    #     }
-    #
-    #     return loss, log
-
     def base_step(self, batch):
         """Base training step for inpainting using a mask created from clean_spec."""
-        x_org = batch[0].to(self.device)
-        x_distorted = x_org * (self.mask)
+        # We now ignore the masked_spec from the dataset;
+        # we generate our own masked_spec_norm from clean_spec_norm.
 
-        x_restored = self.model(x_distorted,self.mask)
-        err = x_org - x_restored
-        objective = err.pow(2).flatten(1).mean()
+        # masked_spec, mask, clean_spec = batch
+        masked_spec, mask, clean_spec = batch  # ignore masked_spec
+        clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec,mask)
+        output = self.model(masked_spec_mag_log, mask)
+        # Compute loss in normalized space
+        opposite_mask = 1 - mask
+        masked_loss = ((torch.abs(output - clean_spec_mag_norm_log)) ** 2) * opposite_mask
 
+        # masked_loss = ((output - clean_spec_mag) ** 2) * mask
+        loss = masked_loss.sum() / (opposite_mask.sum() + 1e-6)
         # Store logs
         log = {
-            'loss': objective.detach()
+            'clean_spec': clean_spec.detach(),
+            'output': output.detach(),
+            'loss': loss.detach()
         }
 
-        return objective, log
+        return loss, log
+
+
 
 
 
@@ -306,20 +277,3 @@ class InpaintingTrainer(nn.Module):
             start_idx = max(0, i - window_size + 1)
             smoothed.append(sum(losses[start_idx:(i + 1)]) / (i - start_idx + 1))
         return smoothed
-
-
-    def _mnist_dataloader(self):
-        batch_size = 128
-        train_set = torchvision.datasets.MNIST(root='./', download=True, train=True,
-                                               transform=torchvision.transforms.ToTensor())
-        dataloader = torch.utils.data.DataLoader(
-            train_set,
-            batch_size=batch_size,
-            shuffle=True,
-        )
-        return dataloader
-
-    def _mask_for_mnist(self):
-        mask = torch.zeros((1, 28, 28)).to(self.device)
-        mask[:, :20, :] = 1.
-        return 1 - mask
