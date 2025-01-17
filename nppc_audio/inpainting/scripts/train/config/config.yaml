@@ -3,7 +3,7 @@
 n_epochs: 15
 checkpoint_dir: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint"
 inpainting_training_configuration:
-  device: "cuda"
+  device: "cpu"
   model_configuration:
     in_channels: 1
     out_channels: 1
@@ -13,8 +13,8 @@ inpainting_training_configuration:
   data_configuration:
     clean_path: "../../../../FullSubNet_plus/data/clean/train"
     sample_rate: 16000
-    missing_length_seconds: 0.45
-    missing_start_seconds: 0.2
+    missing_length_seconds: 0.128
+    missing_start_seconds: 0.4
     # Adjust the sub_sample_length_seconds to get exactly T=512:
 #    sub_sample_length_seconds: 8.176
 #    sub_sample_length_seconds: 4.088
@@ -24,6 +24,7 @@ inpainting_training_configuration:
       nfft: 255
       win_length: 255
       hop_length: 128
+    use_vad: True
 
   dataloader_configuration:
     batch_size: 128
