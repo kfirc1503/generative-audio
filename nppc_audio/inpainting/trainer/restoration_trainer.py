@@ -35,7 +35,7 @@ class InpaintingTrainerConfig(pydantic.BaseModel):
     use_wandb: bool = False
     wandb_project_name: Optional[str] = "generative-audio"
     wandb_run_name: Optional[str] = None
-
+    wandb_tags: Optional[List[str]] = None
 
 class InpaintingTrainer(nn.Module):
     def __init__(self, config: InpaintingTrainerConfig):
@@ -47,7 +47,8 @@ class InpaintingTrainer(nn.Module):
             wandb.init(
                 project=config.wandb_project_name,
                 name=config.wandb_run_name,
-                config=config.model_dump()
+                config=config.model_dump(),
+                tags=config.wandb_tags
             )
 
         # Initialize model and move to device
