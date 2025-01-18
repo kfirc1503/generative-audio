@@ -40,7 +40,7 @@ def restore_pred_spec_using_clean(pred_norm_log_mag, mean, std, clean_spec):
     return pred_spec
 
 
-def plot_spectrograms_and_error(clean_spec, masked_spec, output_mag, mask, sample_len_seconds,mean,std):
+def plot_spectrograms_and_error(clean_spec, masked_spec, output_mag, mask, sample_len_seconds):
     """Plot spectrograms and reconstruction error"""
     fig, axs = plt.subplots(2, 2, figsize=(15, 12))
 
@@ -87,11 +87,11 @@ def plot_spectrograms_and_error(clean_spec, masked_spec, output_mag, mask, sampl
     axs[1, 1].set_title('Reconstruction Error (dB)')
     plt.colorbar(im, ax=axs[1, 1])
 
-    real = clean_spec[:, 0, :, :]  # Real part
-    imag = clean_spec[:, 1, :, :]  # Imaginary part
-    clean_complex_spec = torch.complex(real, imag)  # Combine to complex-valued spectrogram
-    pred_spec = restore_pred_spec_using_clean(output_mag, mean, std, clean_complex_spec)
-    err_spec = clean_spec - pred_spec
+    # real = clean_spec[:, 0, :, :]  # Real part
+    # imag = clean_spec[:, 1, :, :]  # Imaginary part
+    # clean_complex_spec = torch.complex(real, imag)  # Combine to complex-valued spectrogram
+    # pred_spec = restore_pred_spec_using_clean(output_mag, mean, std, clean_complex_spec)
+    # err_spec = clean_spec - pred_spec
 
 
 

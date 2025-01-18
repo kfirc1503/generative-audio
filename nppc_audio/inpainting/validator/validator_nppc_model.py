@@ -264,15 +264,15 @@ class NPPCModelValidator:
             audio_save_path = Path(self.config.save_dir) / "audio_variations"
             alphas = torch.arange(-3, 3.5, 0.5)
             save_pc_audio_variations(
-                clean_spec_mag_norm_log,
+                clean_spec_mag_norm_log.cpu(),
                 pred_spec_mag_log.cpu(),
                 pc_directions.cpu(),
                 clean_spec.cpu(),
                 mask.cpu(),
                 alphas,
                 audio_save_path,
-                mean,
-                std,
+                mean.cpu(),
+                std.cpu(),
                 sample_idx
             )
 
