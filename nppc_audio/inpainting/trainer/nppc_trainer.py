@@ -41,6 +41,7 @@ class NPPCAudioInpaintingTrainerConfig(pydantic.BaseModel):
     wandb_project_name: Optional[str] = "generative-audio"
     wandb_run_name: Optional[str] = None
     wandb_tags: Optional[List[str]] = None
+    wandb_artifact_name: str = "nppc_inpainting_model"  # Single artifact for all checkpoints
 
 
 class NPPCAudioInpaintingTrainer(nn.Module):
@@ -280,9 +281,9 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         if self.config.use_wandb:
             # Save checkpoint as artifact
             artifact = wandb.Artifact(
-                name=f'model-{wandb.run.id}',
+                name= self.config.wandb_artifact_name,
                 type='model',
-                description=f'Model checkpoint at step {self.step}'
+                description='Collection of nppc inpainting model checkpoints'
             )
             artifact.add_file(checkpoint_path)
             wandb.log_artifact(artifact)

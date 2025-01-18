@@ -28,14 +28,14 @@ class InpaintingTrainerConfig(pydantic.BaseModel):
     dataloader_configuration: DataLoaderConfig
     optimizer_configuration: OptimizerConfig
     device: str = "cuda"
-    # save_interval: int = 10
-    # save_best_model: bool = True
 
     # Wandb configuration
     use_wandb: bool = False
     wandb_project_name: Optional[str] = "generative-audio"
     wandb_run_name: Optional[str] = None
     wandb_tags: Optional[List[str]] = None
+    wandb_artifact_name: str = "restoration_model"  # Single artifact for all checkpoints
+
 
 class InpaintingTrainer(nn.Module):
     def __init__(self, config: InpaintingTrainerConfig):
@@ -70,7 +70,7 @@ class InpaintingTrainer(nn.Module):
 
         dataloader = torch.utils.data.DataLoader(
             dataset,
-            batch_size=config.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
+            batch_size=config.dataloader_configuration.batch_size,
             shuffle=config.dataloader_configuration.shuffle,
             num_workers=config.dataloader_configuration.num_workers,
             pin_memory=config.dataloader_configuration.pin_memory
@@ -133,7 +133,6 @@ class InpaintingTrainer(nn.Module):
         fig = self.plot_loss_curve(loss_history, val_loss_history)
 
         if save_flag:
-            # Save final checkpoint
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             final_checkpoint_path = os.path.join(
                 checkpoint_dir,
@@ -197,7 +196,9 @@ class InpaintingTrainer(nn.Module):
         return avg_val_loss
 
     def save_checkpoint(self, checkpoint_path):
-        """Save model checkpoint"""
+        """
+        Save model checkpoint and add it to the wandb artifact
+        """
         checkpoint = {
             'model_state_dict': self.model.net.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
@@ -210,14 +211,24 @@ class InpaintingTrainer(nn.Module):
         print(f"Checkpoint saved to {checkpoint_path}")
 
         if self.config.use_wandb:
-            # Save checkpoint as artifact
-            artifact = wandb.Artifact(
-                name=f'model-{wandb.run.id}',
-                type='model',
-                description=f'Model checkpoint at step {self.step}'
-            )
-            artifact.add_file(checkpoint_path)
-            wandb.log_artifact(artifact)
+            try:
+                # Get or create the artifact
+                artifact = wandb.Artifact(
+                    name=self.config.wandb_artifact_name,
+                    type='model',
+                    description='Collection of restoration model checkpoints'
+                )
+
+                # Add the new checkpoint file to the artifact
+                artifact.add_file(checkpoint_path)
+
+                # Log/update the artifact
+                wandb.log_artifact(artifact)
+
+                print(f"Checkpoint added to wandb artifact '{self.config.wandb_artifact_name}'")
+
+            except Exception as e:
+                print(f"Error saving to wandb: {str(e)}")
 
     def plot_loss_curve(self, loss_history, val_loss_history):
         """Plot the training and validation loss curves"""
@@ -298,7 +309,7 @@ class InpaintingTrainer(nn.Module):
 
             # Save metrics file as artifact
             metrics_artifact = wandb.Artifact(
-                name=f'metrics-{wandb.run.id}',
+                name=f'metrics_{timestamp}',
                 type='metrics',
                 description=f'Training metrics at step {self.step}'
             )

@@ -9,7 +9,7 @@ inpainting_training_configuration:
   use_wandb: true
   wandb_project_name: "generative-audio"
   wandb_run_name: "restoration-inpainting-model-256ms-gap-size"  # Will be auto-generated if not specified
-
+  wandb_artifact_name: "restoration_model"
   # Model configuration
   device: "cuda"
 
