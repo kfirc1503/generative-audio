@@ -1,6 +1,7 @@
 import hydra
 import torch
 from omegaconf import DictConfig
+from datetime import datetime
 
 from nppc_audio.inpainting.trainer.restoration_trainer import InpaintingTrainer
 from nppc_audio.inpainting.trainer.nppc_trainer import NPPCAudioInpaintingTrainer
@@ -9,6 +10,13 @@ from dataset.audio_dataset_inpainting import AudioInpaintingDataset,AudioInpaint
 
 @hydra.main(version_base=None, config_path="config", config_name="config_nppc")
 def main(cfg: DictConfig):
+
+    if cfg.inpainting_nppc_training_configuration.use_wandb and \
+            not cfg.inpainting_nppc_training_configuration.wandb_run_name:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        cfg.inpainting_nppc_training_configuration.wandb_run_name = f"run_{timestamp}"
+
+
     config = Config(**cfg)
     trainer = NPPCAudioInpaintingTrainer(config.inpainting_nppc_training_configuration)
     val_dataloader = None

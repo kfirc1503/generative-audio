@@ -3,6 +3,13 @@ checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
 inpainting_nppc_training_configuration:
   device: "cuda"
   second_moment_loss_lambda: 1
+  use_wandb: true
+  wandb_project_name: "generative-audio"
+  wandb_run_name: "nppc-inpainting-model-256ms-gap-size"  # Will be auto-generated if not specified
+  wandb_tags:
+    - "256ms_gap"            # Gap length
+    - "use_vad" # voice activity is used
+    - "1.533sec_audio_len"
   nppc_model_configuration:
     pretrained_restoration_model_configuration:
       in_channels: 1
@@ -12,7 +19,7 @@ inpainting_nppc_training_configuration:
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250104_194616.pt"
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250105_201001.pt"
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250108_003758.pt"
-    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250118_003032.pt"
+    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250118_162454.pt"
 #    pretrained_restoration_model_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250111_010610.pt"
 
 
@@ -29,12 +36,12 @@ inpainting_nppc_training_configuration:
   data_configuration:
     clean_path: "../../../../../../data/clean/train"
     sample_rate: 16000
-    missing_length_seconds: 0.128
+    missing_length_seconds: 0.256
     missing_start_seconds: 0.4
     # Adjust the sub_sample_length_seconds to get exactly T=512:
 #    sub_sample_length_seconds: 8.176
 #    sub_sample_length_seconds: 4.088
-    sub_sample_length_seconds: 1.022
+    sub_sample_length_seconds: 1.533
     target_dB_FS: -25.0
     stft_configuration:
       nfft: 255

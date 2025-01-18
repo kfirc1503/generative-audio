@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
+import wandb
 
-from typing import Literal
+from typing import Literal, Optional,List
 import pydantic
 import torch.optim as optim
 import json
@@ -36,11 +37,26 @@ class NPPCAudioInpaintingTrainerConfig(pydantic.BaseModel):
     second_moment_loss_grace: int = 500
     max_grad_norm: float = 1.0
 
+    use_wandb: bool = False
+    wandb_project_name: Optional[str] = "generative-audio"
+    wandb_run_name: Optional[str] = None
+    wandb_tags: Optional[List[str]] = None
+
 
 class NPPCAudioInpaintingTrainer(nn.Module):
     def __init__(self, config: NPPCAudioInpaintingTrainerConfig):
         super().__init__()
         self.config = config
+
+        # Initialize wandb if enabled
+        if config.use_wandb:
+            wandb.init(
+                project=config.wandb_project_name,
+                name=config.wandb_run_name,
+                config=config.model_dump(),
+                tags=config.wandb_tags
+            )
+
         ## this is suppose to be the same thing
         # self.nppc_model = self.config.nppc_model_configuration.make_instance()
         self.nppc_model = NPPCModel(self.config.nppc_model_configuration)
@@ -129,7 +145,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             self.step += 1
 
         # Plot loss curve
-        self.plot_loss_curve(loss_history, val_loss_history)
+        fig = self.plot_loss_curve(loss_history, val_loss_history)
 
         if save_flag:
             # Save final checkpoint
@@ -142,6 +158,25 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             # Save metrics including loss history
             self._get_and_save_metrics(checkpoint_dir, log_dict, n_epochs, n_steps, timestamp)
             self.save_checkpoint(final_checkpoint_path)
+
+        # Log everything to wandb at the end
+        if self.config.use_wandb:
+            wandb.log({
+                "train/final_loss": loss_history[-1],
+                "train/avg_loss": sum(loss_history) / len(loss_history),
+                "loss_curve": wandb.Image(fig)
+            })
+
+            if val_dataloader:
+                wandb.log({
+                    "val/final_loss": val_loss,
+                    "val/best_loss": min(val_loss_history) if val_loss_history else None
+                })
+
+            wandb.finish()
+        plt.close(fig)
+
+
 
     def plot_loss_curve(self, loss_history, val_loss_history):
         """Plot the training and validation loss curves with both raw and smoothed versions"""
@@ -185,8 +220,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         # firstly we should move the spec into a mag norm log specs:
         # masked_spec, mask, clean_spec = batch
         masked_spec, mask, clean_spec = batch  # ignore masked_spec
-        clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec,mask)
-
+        clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec, mask)
 
         w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
 
@@ -199,7 +233,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         ## Normalizing by the error's norm
         ## -------------------------------
-        err_norm = err.norm(dim=1) +1e-6
+        err_norm = err.norm(dim=1) + 1e-6
         err = err / err_norm[:, None]
         w_norms = w_norms / err_norm[:, None]
 
@@ -225,10 +259,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             'objective': objective.detach()
         }
 
-
-
         return reconst_err, objective, log
-
 
     def save_checkpoint(self, checkpoint_path):
         """
@@ -246,6 +277,17 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         torch.save(checkpoint, checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")
 
+        if self.config.use_wandb:
+            # Save checkpoint as artifact
+            artifact = wandb.Artifact(
+                name=f'model-{wandb.run.id}',
+                type='model',
+                description=f'Model checkpoint at step {self.step}'
+            )
+            artifact.add_file(checkpoint_path)
+            wandb.log_artifact(artifact)
+
+
     def _get_and_save_metrics(self, checkpoint_dir, log_dict, n_epochs, n_steps, timestamp):
         """Save training metrics to JSON file"""
         final_metrics = {
@@ -261,6 +303,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
                 'audio_len': self.config.data_configuration.sub_sample_length_seconds,
                 'missing_length_seconds': self.config.data_configuration.missing_length_seconds,
                 'missing_start_seconds': self.config.data_configuration.missing_start_seconds,
+                'length_audio_seconds': self.config.data_configuration.sub_sample_length_seconds,
                 'nfft': self.config.data_configuration.stft_configuration.nfft,
                 'n_dirs': self.config.nppc_model_configuration.audio_pc_wrapper_configuration.n_dirs
             }
@@ -271,6 +314,30 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         )
         with open(metrics_path, 'w') as f:
             json.dump(final_metrics, f, indent=4)
+
+
+        # Log to wandb
+        if self.config.use_wandb:
+            # Log metrics
+            wandb.log({
+                "final_metrics/total_steps": final_metrics['total_steps'],
+                "final_metrics/final_loss": final_metrics['final_loss'],
+                "config/learning_rate": final_metrics['training_config']['learning_rate'],
+                "config/batch_size": final_metrics['training_config']['batch_size'],
+                "config/audio_len": final_metrics['training_config']['audio_len'],
+                "config/missing_length": final_metrics['training_config']['missing_length_seconds'],
+                "config/nfft": final_metrics['training_config']['nfft'],
+                "config/n_dirs": final_metrics['training_config']['n_dirs']
+            })
+
+            # Save metrics file as artifact
+            metrics_artifact = wandb.Artifact(
+                name=f'metrics-{wandb.run.id}',
+                type='metrics',
+                description=f'Training metrics at step {self.step}'
+            )
+            metrics_artifact.add_file(metrics_path)
+            wandb.log_artifact(metrics_artifact)
 
     def _calculate_final_objective(self, reconst_err, second_moment_mse):
         second_moment_loss_lambda = -1 + 2 * self.step / self.config.second_moment_loss_grace

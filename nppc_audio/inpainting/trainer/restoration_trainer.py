@@ -270,6 +270,7 @@ class InpaintingTrainer(nn.Module):
                 'audio_len': self.config.data_configuration.sub_sample_length_seconds,
                 'missing_length_seconds': self.config.data_configuration.missing_length_seconds,
                 'missing_start_seconds': self.config.data_configuration.missing_start_seconds,
+                'length_audio_seconds': self.config.data_configuration.sub_sample_length_seconds,
                 'nfft': self.config.data_configuration.stft_configuration.nfft
             }
         }
