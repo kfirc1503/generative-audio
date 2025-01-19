@@ -167,7 +167,7 @@ class NPPCModel(nn.Module):
 
         except Exception as e:
             raise RuntimeError(f"Failed to load model from local path: {str(e)}")
-        
+
 
     def forward(self, masked_spec_mag_norm: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """
@@ -209,5 +209,5 @@ class NPPCModel(nn.Module):
             pred_spec_mag_norm_log: Predicted normalized log magnitude spectrogram [B,1,F,T]
         """
         with torch.no_grad():
-            pred_spec_mag_log = self.pretrained_restoration_model(masked_spec_mag_log)
+            pred_spec_mag_log = self.pretrained_restoration_model(masked_spec_mag_log, mask)
         return pred_spec_mag_log

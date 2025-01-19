@@ -208,6 +208,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         plt.tight_layout()
         plt.show()
+        return fig
 
     def base_step(self, batch):
         """
