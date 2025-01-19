@@ -1,15 +1,16 @@
-n_epochs: 8
+n_epochs: 5
 checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
 inpainting_nppc_training_configuration:
   device: "cuda"
   second_moment_loss_lambda: 1
   use_wandb: true
   wandb_project_name: "generative-audio"
-  wandb_run_name: "nppc-inpainting-model-256ms-gap-size"  # Will be auto-generated if not specified
+  wandb_run_name: "nppc-inpainting-model-160ms-gap-size"  # Will be auto-generated if not specified
   wandb_tags:
-    - "256ms_gap"            # Gap length
+    - "160ms_gap"            # Gap length
     - "use_vad"              # voice activity is used
-    - "1.533sec_audio_len"
+    - "1.022sec_audio_len"
+  wandb_artifact_name: "nppc_inpainting_model"  # Single artifact for all checkpoints
   nppc_model_configuration:
     pretrained_restoration_model_configuration:
       in_channels: 1
@@ -19,9 +20,9 @@ inpainting_nppc_training_configuration:
     wandb_config:
       entity: "kfirc-tel-aviv-university"
       project: "generative-audio"
-      artifact_name: "model-3j6jcyq7"
+      artifact_name: "restoration_model"
       artifact_version: "v0"
-      checkpoint_filename: "checkpoint_final_20250118_162454.pt"
+      checkpoint_filename: "checkpoint_final_20250119_165323.pt"
 
     audio_pc_wrapper_configuration:
       n_dirs: 5
@@ -33,9 +34,9 @@ inpainting_nppc_training_configuration:
   data_configuration:
     clean_path: "../../../../../../data/clean/train"
     sample_rate: 16000
-    missing_length_seconds: 0.256
+    missing_length_seconds: 0.160
     missing_start_seconds: 0.4
-    sub_sample_length_seconds: 1.533
+    sub_sample_length_seconds: 1.022
     target_dB_FS: -25.0
     stft_configuration:
       nfft: 255

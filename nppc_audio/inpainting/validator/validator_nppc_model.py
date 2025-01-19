@@ -9,7 +9,8 @@ import numpy as np
 import torchaudio
 
 
-def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, alphas,
+def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, masked_audio,
+                             alphas,
                              save_dir, mean, std, sample_idx,
                              n_fft=255, hop_length=128, sample_rate=16000):
     """
@@ -32,14 +33,14 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     """
     save_dir = Path(save_dir) / f"sample_{sample_idx}"
     save_dir.mkdir(parents=True, exist_ok=True)
-    clean_spec_ref_complex = torch.complex(clean_spec[0,0], clean_spec[0,1])
+    clean_spec_ref_complex = torch.complex(clean_spec[0, 0], clean_spec[0, 1])
     # Get phase from clean spectrogram
     clean_phase = torch.angle(clean_spec_ref_complex)
     window = torch.hann_window(n_fft).to(clean_phase.device)
 
     # Save clean audio using normalized log magnitude
     clean_mag_log = clean_spec_mag_norm_log[0, 0] * std + mean
-    clean_mag_linear = torch.exp(clean_mag_log) -1e-6
+    clean_mag_linear = torch.exp(clean_mag_log) - 1e-6
     real_part = clean_mag_linear * torch.cos(clean_phase)
     imag_part = clean_mag_linear * torch.sin(clean_phase)
     complex_clean_spec = torch.complex(real_part, imag_part)
@@ -60,6 +61,9 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
 
     clean_ref_path = save_dir / "clean_ref.wav"
     torchaudio.save(clean_ref_path, clean_audio_ref.unsqueeze(0), sample_rate=sample_rate)
+
+    masked_audio_path = save_dir / "masked_audio.wav"
+    torchaudio.save(masked_audio_path, masked_audio.unsqueeze(0), sample_rate=sample_rate)
 
     # For each PC direction
     for i in range(pc_directions_mag.shape[1]):
@@ -94,7 +98,6 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
             # Save audio file
             audio_path = pc_dir / f"alpha_{alpha:.1f}.wav"
             torchaudio.save(audio_path, audio.unsqueeze(0), sample_rate=sample_rate)
-
 
 
 def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_mag, mask, sample_len_seconds,
@@ -236,7 +239,7 @@ class NPPCModelValidator:
         self.model.to(self.device)
         self.model.eval()
 
-    def validate_sample(self, masked_spec, mask, clean_spec, sample_len_seconds, sample_idx):
+    def validate_sample(self, masked_spec, mask, clean_spec, masked_audio, sample_len_seconds, sample_idx):
         """Validate model on a single sample"""
         with torch.no_grad():
             # Move inputs to device
@@ -269,6 +272,7 @@ class NPPCModelValidator:
                 pc_directions.cpu(),
                 clean_spec.cpu(),
                 mask.cpu(),
+                masked_audio.cpu(),
                 alphas,
                 audio_save_path,
                 mean.cpu(),

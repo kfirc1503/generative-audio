@@ -47,7 +47,7 @@ def main(cfg: DictConfig):
     save_dir = Path(config.model_validator_configuration.save_dir)
     save_dir.mkdir(exist_ok=True, parents=True)
 
-    for i, (masked_spec, mask, clean_spec) in enumerate(dataloader):
+    for i, (masked_spec, mask, clean_spec , masked_audio) in enumerate(dataloader):
         if i >= num_samples:
             break
 
@@ -57,6 +57,7 @@ def main(cfg: DictConfig):
             masked_spec,
             mask,
             clean_spec,
+            masked_audio,
             config.data_configuration.sub_sample_length_seconds,
             i
         )

@@ -104,7 +104,7 @@ class InpaintingTrainer(nn.Module):
         pbar = tqdm(loop_loader, total=len(loop_loader))
         for batch in pbar:
             # Move batch to device
-            masked_spec, mask, clean_spec = [x.to(self.device) for x in batch]
+            masked_spec, mask, clean_spec, _ = [x.to(self.device) for x in batch]
             batch = (masked_spec, mask, clean_spec)
 
             # Forward and backward pass

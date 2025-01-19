@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torchvision
 import wandb
 
-from typing import Literal, Optional,List
+from typing import Literal, Optional, List
 import pydantic
 import torch.optim as optim
 import json
@@ -108,7 +108,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         pbar = tqdm(loop_loader, total=len(loop_loader))
         for batch in pbar:
             # Move batch to device
-            masked_spec, mask, clean_spec = [x.to(self.device) for x in batch]
+            masked_spec, mask, clean_spec, _ = [x.to(self.device) for x in batch]
             batch = (masked_spec, mask, clean_spec)
 
             # Forward and backward pass
@@ -176,8 +176,6 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
             wandb.finish()
         plt.close(fig)
-
-
 
     def plot_loss_curve(self, loss_history, val_loss_history):
         """Plot the training and validation loss curves with both raw and smoothed versions"""
@@ -282,13 +280,12 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         if self.config.use_wandb:
             # Save checkpoint as artifact
             artifact = wandb.Artifact(
-                name= self.config.wandb_artifact_name,
+                name=self.config.wandb_artifact_name,
                 type='model',
                 description='Collection of nppc inpainting model checkpoints'
             )
             artifact.add_file(checkpoint_path)
             wandb.log_artifact(artifact)
-
 
     def _get_and_save_metrics(self, checkpoint_dir, log_dict, n_epochs, n_steps, timestamp):
         """Save training metrics to JSON file"""
@@ -316,7 +313,6 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         )
         with open(metrics_path, 'w') as f:
             json.dump(final_metrics, f, indent=4)
-
 
         # Log to wandb
         if self.config.use_wandb:

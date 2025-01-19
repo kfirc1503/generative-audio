@@ -38,7 +38,7 @@ def main(cfg: DictConfig):
     print(f"Number of samples to validate: {num_samples}")
     print("\nProcessing samples...")
 
-    for i, (masked_spec, mask, clean_spec) in enumerate(dataloader):
+    for i, (masked_spec, mask, clean_spec , _) in enumerate(dataloader):
         if i >= num_samples:
             break
 

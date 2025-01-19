@@ -23,9 +23,9 @@ inpainting_training_configuration:
   data_configuration:
     clean_path: "../../../../../../data/clean/train"
     sample_rate: 16000
-    missing_length_seconds: 0.256
+    missing_length_seconds: 0.160
     missing_start_seconds: 0.4
-    sub_sample_length_seconds: 1.533
+    sub_sample_length_seconds: 1.022
 #    sub_sample_length_seconds: 2.044
 
     target_dB_FS: -25.0
@@ -38,7 +38,7 @@ inpainting_training_configuration:
 
   # Dataloader configuration
   dataloader_configuration:
-    batch_size: 32
+    batch_size: 128
     shuffle: true
     num_workers: 8
     pin_memory: true

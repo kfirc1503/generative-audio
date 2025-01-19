@@ -187,7 +187,7 @@ class AudioInpaintingDataset(Dataset):
         stft_masked = stft_masked.squeeze(0)
         stft_clean = stft_clean.squeeze(0)
 
-        return stft_masked, mask_frames, stft_clean
+        return stft_masked, mask_frames, stft_clean , masked_audio
 
     def time_to_spec_mask(self, mask_time, T_frames, waveform_length, center=True):
         """Convert time-domain mask to spectrogram mask"""
