@@ -63,7 +63,7 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     torchaudio.save(clean_ref_path, clean_audio_ref.unsqueeze(0), sample_rate=sample_rate)
 
     masked_audio_path = save_dir / "masked_audio.wav"
-    torchaudio.save(masked_audio_path, masked_audio.unsqueeze(0), sample_rate=sample_rate)
+    torchaudio.save(masked_audio_path, masked_audio.squeeze(0), sample_rate=sample_rate)
 
     # For each PC direction
     for i in range(pc_directions_mag.shape[1]):

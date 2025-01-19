@@ -1,15 +1,15 @@
 # Number of samples to validate
-num_samples_to_validate: 30
+num_samples_to_validate: 10
 
 # Model validator configuration
 model_validator_configuration:
   #this is maybe working
 #  checkpoint_path: "../../../../FullSubNet_plus/data/inpainting/nppc_model/checkpoint/checkpoint_final_20250108_224158.pt"
-  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250119_004519.pt"
+  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250119_172956.pt"
 
   device: "cuda"
   save_dir: "validation_nppc_results"
-  max_dirs_to_plot: 16  # Set to null to plot all directions
+  max_dirs_to_plot: 5  # Set to null to plot all directions
   model_configuration:
     pretrained_restoration_model_configuration:
       in_channels: 1
@@ -19,9 +19,9 @@ model_validator_configuration:
     wandb_config:
       entity: "kfirc-tel-aviv-university"
       project: "generative-audio"
-      artifact_name: "model-3j6jcyq7"
+      artifact_name: "restoration_model"
       artifact_version: "v0"
-      checkpoint_filename: "checkpoint_final_20250119_172956.pt"
+      checkpoint_filename: "checkpoint_final_20250119_165323.pt"
 
 #    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250118_003032.pt"
     audio_pc_wrapper_configuration:
@@ -34,7 +34,7 @@ model_validator_configuration:
 data_configuration:
   clean_path: "../../../../../../data/clean/test"
   sample_rate: 16000
-  missing_length_seconds: 0.256
+  missing_length_seconds: 0.160
   missing_start_seconds: 0.4
   sub_sample_length_seconds: 1.022
   target_dB_FS: -25.0
