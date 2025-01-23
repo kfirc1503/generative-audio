@@ -11,7 +11,7 @@ import librosa
 import whisper
 
 
-def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000):
+def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, transcriptions: dict = None):
     """
     Plot pitch contours for different audio variations using pyin, each in its own row
     """
@@ -41,8 +41,13 @@ def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000):
 
         axes[plot_idx].plot(times, f0, label='f0', alpha=0.6)
         axes[plot_idx].scatter(times[voiced_flag], f0[voiced_flag],
-                             color='r', alpha=0.4, label='voiced')
-        axes[plot_idx].set_title(f'Pitch Contour - {name}')
+                               color='r', alpha=0.4, label='voiced')
+
+        title = f'Pitch Contour - {name}'
+        if transcriptions and name in transcriptions:
+            title += f'\n"{transcriptions[name]}"'
+
+        axes[plot_idx].set_title(title)
         axes[plot_idx].set_ylabel('Frequency (Hz)')
         axes[plot_idx].set_xlabel('Time (s)')
         axes[plot_idx].grid(True)
@@ -66,8 +71,13 @@ def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000):
 
         axes[plot_idx].plot(times, f0, label='f0', alpha=0.6)
         axes[plot_idx].scatter(times[voiced_flag], f0[voiced_flag],
-                             color='r', alpha=0.4, label='voiced')
-        axes[plot_idx].set_title(f'Pitch Contour - {name}')
+                               color='r', alpha=0.4, label='voiced')
+
+        title = f'Pitch Contour - {name}'
+        if transcriptions and name in transcriptions:
+            title += f'\n"{transcriptions[name]}"'
+
+        axes[plot_idx].set_title(title)
         axes[plot_idx].set_ylabel('Frequency (Hz)')
         axes[plot_idx].set_xlabel('Time (s)')
         axes[plot_idx].grid(True)
@@ -76,6 +86,7 @@ def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000):
 
     plt.tight_layout()
     return fig
+
 
 def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_mag, mask, sample_len_seconds,
                          max_dirs=None):
@@ -179,17 +190,21 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
                              alphas, save_dir, mean, std, sample_idx,
                              n_fft=255, hop_length=128, sample_rate=16000):
     """
-    Save audio variations and their pitch analyses
+    Save audio variations, their pitch analyses, and transcriptions
     """
     # Create sample-specific directory
     sample_dir = Path(save_dir) / f"sample_{sample_idx}"
     sample_dir.mkdir(parents=True, exist_ok=True)
 
+    # Initialize whisper model (using base model for faster inference)
+    whisper_model = whisper.load_model("base", language="en")
+    transcriptions = {}
+
+    # Process clean audio and get transcription
     clean_spec_ref_complex = torch.complex(clean_spec[0, 0], clean_spec[0, 1])
     clean_phase = torch.angle(clean_spec_ref_complex)
     window = torch.hann_window(n_fft).to(clean_phase.device)
 
-    # Process clean audio
     clean_mag_log = clean_spec_mag_norm_log[0, 0] * std + mean
     clean_mag_linear = torch.exp(clean_mag_log) - 1e-6
     real_part = clean_mag_linear * torch.cos(clean_phase)
@@ -208,16 +223,18 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
         'masked': masked_audio
     }
 
-    # Save reference audio files in sample directory
+    # Save reference audio files and get transcriptions
     clean_path = sample_dir / "clean.wav"
     torchaudio.save(clean_path, clean_audio.unsqueeze(0), sample_rate=sample_rate)
+    transcriptions['clean'] = whisper_model.transcribe(clean_path.as_posix())['text']
 
     masked_audio_path = sample_dir / "masked_audio.wav"
     torchaudio.save(masked_audio_path, masked_audio.squeeze(0), sample_rate=sample_rate)
+    transcriptions['masked'] = whisper_model.transcribe(masked_audio_path.as_posix())['text']
 
     # Process PC directions
     for i in range(pc_directions_mag.shape[1]):
-        pc_dir = sample_dir / f"pc_{i + 1}"  # Create PC directory inside sample directory
+        pc_dir = sample_dir / f"pc_{i + 1}"
         pc_dir.mkdir(exist_ok=True)
         pc_dir_db = pc_directions_mag[0, i]
 
@@ -236,14 +253,21 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
                                 window=window)
 
             # Add to variations dictionary
-            audio_variations[f'pc{i+1}_alpha{alpha:.1f}'] = audio
+            variation_name = f'pc{i + 1}_alpha{alpha:.1f}'
+            audio_variations[variation_name] = audio
 
-            # Save audio file in PC directory
+            # Save audio file and get transcription
             audio_path = pc_dir / f"alpha_{alpha:.1f}.wav"
             torchaudio.save(audio_path, audio.unsqueeze(0), sample_rate=sample_rate)
+            transcriptions[variation_name] = whisper_model.transcribe(audio_path.as_posix())['text']
 
-    # Generate and save pitch analysis
-    pitch_fig = plot_pitch_comparison(audio_variations, sample_rate)
+    # Save transcriptions to a text file
+    with open(sample_dir / "transcriptions.txt", "w") as f:
+        for name, text in transcriptions.items():
+            f.write(f"{name}:\n{text}\n\n")
+
+    # Generate and save pitch analysis with transcriptions
+    pitch_fig = plot_pitch_comparison(audio_variations, sample_rate, transcriptions)
     pitch_fig.savefig(sample_dir / f"pitch_comparison.png")
     plt.close(pitch_fig)
 
@@ -299,7 +323,7 @@ class NPPCModelValidator:
                 max_dirs=self.config.max_dirs_to_plot
             )
 
-            # Save audio variations with pitch analysis
+            # Save audio variations with pitch analysis and transcriptions
             audio_save_path = Path(self.config.save_dir) / "audio_variations"
             alphas = torch.arange(-3, 3.5, 0.5)
             save_pc_audio_variations(
