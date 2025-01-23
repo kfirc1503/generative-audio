@@ -8,8 +8,12 @@ inpainting_training_configuration:
   # Wandb configuration
   use_wandb: true
   wandb_project_name: "generative-audio"
-  wandb_run_name: "restoration-inpainting-model-256ms-gap-size"  # Will be auto-generated if not specified
+  wandb_run_name: "restoration-inpainting-model-128ms-gap-size"  # Will be auto-generated if not specified
   wandb_artifact_name: "restoration_model"
+  wandb_tags:
+    - "128ms_gap"            # Gap length
+    - "use_vad"              # voice activity is used
+    - "2.044sec_audio_len"
   # Model configuration
   device: "cuda"
 
@@ -23,10 +27,10 @@ inpainting_training_configuration:
   data_configuration:
     clean_path: "../../../../../../data/clean/train"
     sample_rate: 16000
-    missing_length_seconds: 0.160
+    missing_length_seconds: 0.128
     missing_start_seconds: 0.4
-    sub_sample_length_seconds: 1.022
-#    sub_sample_length_seconds: 2.044
+#    sub_sample_length_seconds: 1.022
+    sub_sample_length_seconds: 2.044
 
     target_dB_FS: -25.0
     target_dB_FS_floating_value: 0

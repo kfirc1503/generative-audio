@@ -6,6 +6,7 @@ import torchaudio
 import pydantic
 from torch.utils.data import Dataset
 from utils import audio_to_stft, StftConfig
+import numpy as np
 
 
 class AudioInpaintingConfig(pydantic.BaseModel):
@@ -20,6 +21,7 @@ class AudioInpaintingConfig(pydantic.BaseModel):
     target_dB_FS_floating_value: float = 0.0
     stft_configuration: StftConfig
     use_vad: bool = False  # Whether to use VAD for masking
+    seed: Optional[int] = None  # Added seed parameter
 
     # Computed fields
     sub_sample_length: int = pydantic.Field(None)
@@ -57,9 +59,8 @@ class AudioInpaintingDataset(Dataset):
     def __len__(self) -> int:
         return len(self.clean_files)
 
-    def get_speech_segments(self, audio_path: Path , audio: torch.Tensor) -> list:
+    def get_speech_segments(self, audio_path: Path, audio: torch.Tensor) -> list:
         """Get speech segments from audio file using VAD"""
-        # wav = self.read_audio(str(audio_path))
         speech_timestamps = self.get_speech_timestamps(
             audio,
             self.model,
@@ -83,13 +84,13 @@ class AudioInpaintingDataset(Dataset):
         mask[:, start_idx:end_idx] = 0
         return mask
 
-    def _create_mask(self, audio_length: int, file_path: Path , audio: torch.Tensor) -> torch.Tensor:
+    def _create_mask(self, audio_length: int, file_path: Path, audio: torch.Tensor) -> torch.Tensor:
         """Create binary mask for inpainting (1 for kept samples, 0 for missing)"""
         if not self.config.use_vad:
             return self._create_random_mask(audio_length)
 
         # Get speech segments
-        valid_segments = self.get_speech_segments(file_path , audio)
+        valid_segments = self.get_speech_segments(file_path, audio)
 
         if not valid_segments:
             return self._create_random_mask(audio_length)
@@ -159,6 +160,19 @@ class AudioInpaintingDataset(Dataset):
                 - mask: Binary mask (1 for kept samples, 0 for missing)
                 - clean_audio: Original clean audio
         """
+        # Set seed based on index for consistent sampling
+        if self.config.seed is not None:
+            # Save current random state
+            rng_state = torch.get_rng_state()
+            random_state = random.getstate()
+            np_state = np.random.get_state()
+
+            # Set seed based on file index for consistency
+            seed = self.config.seed + idx
+            torch.manual_seed(seed)
+            random.seed(seed)
+            np.random.seed(seed)
+
         clean_file = self.clean_files[idx]
         clean_audio = self._load_and_process_audio(clean_file)
 
@@ -175,6 +189,12 @@ class AudioInpaintingDataset(Dataset):
         mask = self._create_mask(clean_audio.shape[1], clean_file, clean_audio)
         masked_audio = clean_audio * mask
 
+        # Restore random states if seed was set
+        if self.config.seed is not None:
+            torch.set_rng_state(rng_state)
+            random.setstate(random_state)
+            np.random.set_state(np_state)
+
         # Convert to STFT
         device = torch.device("cpu")
         stft_clean = audio_to_stft(clean_audio, self.config.stft_configuration, device)
@@ -187,7 +207,7 @@ class AudioInpaintingDataset(Dataset):
         stft_masked = stft_masked.squeeze(0)
         stft_clean = stft_clean.squeeze(0)
 
-        return stft_masked, mask_frames, stft_clean , masked_audio
+        return stft_masked, mask_frames, stft_clean, masked_audio
 
     def time_to_spec_mask(self, mask_time, T_frames, waveform_length, center=True):
         """Convert time-domain mask to spectrogram mask"""
