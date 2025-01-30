@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from nppc_audio.inpainting.nppc.pc_wrapper import AudioInpaintingPCWrapperConfig, AudioInpaintingPCWrapper
 from nppc_audio.inpainting.networks.unet import UNet, UNetConfig, RestorationWrapper
 from nppc_audio.inpainting.nppc.nppc_model import NPPCModelConfig, NPPCModel
-from dataset.audio_dataset_inpainting import AudioInpaintingDataset, AudioInpaintingConfig
+from dataset.audio_dataset_inpainting import AudioInpaintingDataset, AudioInpaintingConfig, AudioInpaintingSample
 
 import utils
 from nppc_audio.trainer import NPPCAudioTrainer
@@ -73,7 +73,9 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             batch_size=config.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
             shuffle=config.dataloader_configuration.shuffle,
             num_workers=config.dataloader_configuration.num_workers,
-            pin_memory=config.dataloader_configuration.pin_memory
+            pin_memory=config.dataloader_configuration.pin_memory,
+            collate_fn=self._collate_fn
+
         )
         self.dataloader = dataloader
 
@@ -86,6 +88,28 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             **config.optimizer_configuration.args,
             # weight_decay=1e-4
         )
+
+    @staticmethod
+    def _collate_fn(batch: List[AudioInpaintingSample]):
+        """Custom collate function to handle AudioInpaintingSample batching."""
+
+        # Stack tensors for training
+        stft_masked = torch.stack([b.stft_masked for b in batch])
+        mask_frames = torch.stack([b.mask_frames for b in batch])
+        stft_clean = torch.stack([b.stft_clean for b in batch])
+        masked_audio = torch.stack([b.masked_audio for b in batch])
+
+        # Collect metadata in a dictionary
+        metadata = {
+            "clean_audio_paths": [str(b.clean_audio_path) for b in batch],
+            "subsample_start_idx": [b.subsample_start_idx for b in batch],
+            "mask_start_idx": [b.mask_start_idx for b in batch],
+            "mask_end_idx": [b.mask_end_idx for b in batch],
+            "transcriptions": [b.transcription for b in batch],
+            "sample_rates": [b.sample_rate for b in batch],
+        }
+
+        return stft_masked, mask_frames, stft_clean, masked_audio, metadata
 
     def train(self, n_steps=None, n_epochs=None, checkpoint_dir="checkpoints", save_flag=True, val_dataloader=None):
         """Main training loop using LoopLoader"""
@@ -108,8 +132,15 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         pbar = tqdm(loop_loader, total=len(loop_loader))
         for batch in pbar:
             # Move batch to device
-            masked_spec, mask, clean_spec, _ = [x.to(self.device) for x in batch]
-            batch = (masked_spec, mask, clean_spec)
+            # Unpack batch including metadata
+            masked_spec, mask_frames, clean_spec, masked_audio, metadata = batch
+
+            # Move tensors to device
+            masked_spec = masked_spec.to(self.device)
+            mask_frames = mask_frames.to(self.device)
+            clean_spec = clean_spec.to(self.device)
+
+            batch = (masked_spec, mask_frames, clean_spec)
 
             # Forward and backward pass
             reconst_err, objective, log_dict = self.base_step(batch)

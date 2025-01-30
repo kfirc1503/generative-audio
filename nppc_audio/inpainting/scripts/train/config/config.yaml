@@ -14,6 +14,7 @@ inpainting_training_configuration:
     - "128ms_gap"            # Gap length
     - "use_vad"              # voice activity is used
     - "2.044sec_audio_len"
+    - "libriSpeech_dataset"
   # Model configuration
   device: "cuda"
 
@@ -25,7 +26,7 @@ inpainting_training_configuration:
 
   # Data configuration
   data_configuration:
-    clean_path: "../../../../../../data/clean/train"
+    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
     sample_rate: 16000
     missing_length_seconds: 0.128
     missing_start_seconds: 0.4

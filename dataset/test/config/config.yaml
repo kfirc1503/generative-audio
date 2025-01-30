@@ -1,12 +1,12 @@
 inpainting_dataset:
-  clean_path: "../../FullSubNet_plus/data/clean/test"
+  clean_path: "../../../../data/LibriSpeech/LibriSpeech/test-clean"  # Direct path to your audio files
   sample_rate: 16000
-  missing_length_seconds: 1.0
-  missing_start_seconds: 2.0  # Set to null for random position
-  sub_sample_length_seconds: 8.0
+  missing_length_seconds: 0.128
+  missing_start_seconds: 1 # Set to null for random position
+  sub_sample_length_seconds: 2
   target_dB_FS: -25.0
   target_dB_FS_floating_value: 0.0
   stft_configuration:
-    nfft: 512
-    win_length: 512
-    hop_length: 256
+    nfft: 255
+    win_length: 255
+    hop_length: 128

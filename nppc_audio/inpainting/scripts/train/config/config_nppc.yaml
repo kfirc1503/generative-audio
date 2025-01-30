@@ -10,6 +10,7 @@ inpainting_nppc_training_configuration:
     - "128ms_gap"            # Gap length
     - "use_vad"              # voice activity is used
     - "2.044sec_audio_len"
+    - "libri_speech"
   wandb_artifact_name: "nppc_inpainting_model"  # Single artifact for all checkpoints
   nppc_model_configuration:
     pretrained_restoration_model_configuration:
@@ -22,7 +23,7 @@ inpainting_nppc_training_configuration:
       project: "generative-audio"
       artifact_name: "restoration_model"
       artifact_version: "latest"
-      checkpoint_filename: "checkpoint_final_20250120_185759.pt"
+      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
 
     audio_pc_wrapper_configuration:
       n_dirs: 5
@@ -32,7 +33,7 @@ inpainting_nppc_training_configuration:
     device: "cuda"
 
   data_configuration:
-    clean_path: "../../../../../../data/clean/train"
+    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
     sample_rate: 16000
     missing_length_seconds: 0.128
     missing_start_seconds: 0.4
