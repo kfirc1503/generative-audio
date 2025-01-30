@@ -197,7 +197,7 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     sample_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize whisper model (using base model for faster inference)
-    whisper_model = whisper.load_model("base", language="en")
+    whisper_model = whisper.load_model("base")
     transcriptions = {}
 
     # Process clean audio and get transcription
@@ -226,11 +226,11 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     # Save reference audio files and get transcriptions
     clean_path = sample_dir / "clean.wav"
     torchaudio.save(clean_path, clean_audio.unsqueeze(0), sample_rate=sample_rate)
-    transcriptions['clean'] = whisper_model.transcribe(clean_path.as_posix())['text']
+    transcriptions['clean'] = whisper_model.transcribe(clean_path.as_posix(), language="en")['text']
 
     masked_audio_path = sample_dir / "masked_audio.wav"
     torchaudio.save(masked_audio_path, masked_audio.squeeze(0), sample_rate=sample_rate)
-    transcriptions['masked'] = whisper_model.transcribe(masked_audio_path.as_posix())['text']
+    transcriptions['masked'] = whisper_model.transcribe(masked_audio_path.as_posix(), language="en")['text']
 
     # Process PC directions
     for i in range(pc_directions_mag.shape[1]):
@@ -259,7 +259,7 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
             # Save audio file and get transcription
             audio_path = pc_dir / f"alpha_{alpha:.1f}.wav"
             torchaudio.save(audio_path, audio.unsqueeze(0), sample_rate=sample_rate)
-            transcriptions[variation_name] = whisper_model.transcribe(audio_path.as_posix())['text']
+            transcriptions[variation_name] = whisper_model.transcribe(audio_path.as_posix() , language="en")['text']
 
     # Save transcriptions to a text file
     with open(sample_dir / "transcriptions.txt", "w") as f:
