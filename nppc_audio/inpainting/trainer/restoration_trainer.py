@@ -74,7 +74,7 @@ class InpaintingTrainer(nn.Module):
             shuffle=config.dataloader_configuration.shuffle,
             num_workers=config.dataloader_configuration.num_workers,
             pin_memory=config.dataloader_configuration.pin_memory,
-            collate_fn=self._collate_fn
+            collate_fn=utils.collate_fn
         )
         self.dataloader = dataloader
         self.step = 0

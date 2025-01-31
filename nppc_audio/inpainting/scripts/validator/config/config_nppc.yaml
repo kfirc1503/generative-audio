@@ -5,7 +5,7 @@ num_samples_to_validate: 10
 model_validator_configuration:
   #this is maybe working
 #  checkpoint_path: "../../../../FullSubNet_plus/data/inpainting/nppc_model/checkpoint/checkpoint_final_20250108_224158.pt"
-  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250120_194104.pt"
+  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250131_001448.pt"
 
   device: "cuda"
   save_dir: "validation_nppc_results"
@@ -21,7 +21,7 @@ model_validator_configuration:
       project: "generative-audio"
       artifact_name: "restoration_model"
       artifact_version: "latest"
-      checkpoint_filename: "checkpoint_final_20250120_185759.pt"
+      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
 
 #    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250118_003032.pt"
     audio_pc_wrapper_configuration:
@@ -32,7 +32,7 @@ model_validator_configuration:
 
 # Data configuration
 data_configuration:
-  clean_path: "../../../../../../data/clean/test"
+  clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/test-clean"
   sample_rate: 16000
   missing_length_seconds: 0.128
   missing_start_seconds: 0.4

@@ -11,81 +11,158 @@ import librosa
 import whisper
 
 
-def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, transcriptions: dict = None):
+def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: int = 16000):
     """
-    Plot pitch contours for different audio variations using pyin, each in its own row
+    Plot pitch contours comparing clean audio with PC variations.
+    First subplot shows clean reference, followed by one subplot per PC direction.
+
+    Args:
+        audio_variations: Dictionary containing clean audio and PC variations
+        n_dirs: Number of PC directions to plot
+        sample_rate: Audio sample rate in Hz
     """
-    # Separate base variations (clean, masked) from PC variations
-    base_variations = {k: v for k, v in audio_variations.items() if k in ['clean', 'masked']}
-    pc_variations = {k: v for k, v in audio_variations.items() if k not in ['clean', 'masked']}
+    # Get clean audio as reference
+    clean_audio = audio_variations['clean']
 
-    # Calculate total number of plots needed
-    n_plots = len(audio_variations)
-    fig, axes = plt.subplots(n_plots, 1, figsize=(15, 4 * n_plots))
+    # Create figure with n_dirs + 1 subplots (clean + PC variations)
+    fig, axes = plt.subplots(n_dirs + 1, 1, figsize=(15, 4 * (n_dirs + 1)))
 
-    # Plot base variations first
-    plot_idx = 0
-    for name, audio in base_variations.items():
-        audio_np = audio.squeeze().numpy()
-        if audio_np.ndim > 1:
-            audio_np = audio_np[0]
+    # Calculate clean pitch contour once
+    clean_np = clean_audio.squeeze().numpy()
+    if clean_np.ndim > 1:
+        clean_np = clean_np[0]
+    f0_clean, voiced_flag_clean, _ = librosa.pyin(
+        clean_np,
+        fmin=80,
+        fmax=400,
+        sr=sample_rate
+    )
+    times = librosa.times_like(f0_clean)
 
-        f0, voiced_flag, voiced_probs = librosa.pyin(
-            audio_np,
-            fmin=80,
-            fmax=400,
-            sr=sample_rate
-        )
+    # Plot clean reference in first subplot
+    axes[0].plot(times, f0_clean, color='black', label='Clean', linewidth=2)
+    axes[0].set_title('Clean Audio Pitch Contour')
+    axes[0].set_ylabel('Frequency (Hz)')
+    axes[0].set_xlabel('Time (s)')
+    axes[0].grid(True)
+    axes[0].legend()
 
-        times = librosa.times_like(f0)
+    # Create colormap for alpha variations
+    unique_alphas = sorted(set(float(k.split('alpha')[-1]) for k in audio_variations.keys() if 'alpha' in k))
+    colors = plt.cm.viridis(np.linspace(0, 1, len(unique_alphas)))
 
-        axes[plot_idx].plot(times, f0, label='f0', alpha=0.6)
-        axes[plot_idx].scatter(times[voiced_flag], f0[voiced_flag],
-                               color='r', alpha=0.4, label='voiced')
+    # Plot each PC direction
+    for i in range(n_dirs):
+        pc_num = i + 1
+        ax = axes[i + 1]  # +1 because first subplot is clean reference
 
-        title = f'Pitch Contour - {name}'
-        if transcriptions and name in transcriptions:
-            title += f'\n"{transcriptions[name]}"'
+        # Plot clean reference
+        ax.plot(times, f0_clean, color='black', label='Clean', linewidth=2)
 
-        axes[plot_idx].set_title(title)
-        axes[plot_idx].set_ylabel('Frequency (Hz)')
-        axes[plot_idx].set_xlabel('Time (s)')
-        axes[plot_idx].grid(True)
-        axes[plot_idx].legend()
-        plot_idx += 1
+        # Plot each alpha variation for this PC
+        for alpha_idx, alpha in enumerate(unique_alphas):
+            variation_key = f'pc{pc_num}_alpha{alpha:.1f}'
+            if variation_key in audio_variations:
+                audio = audio_variations[variation_key]
+                audio_np = audio.squeeze().numpy()
+                if audio_np.ndim > 1:
+                    audio_np = audio_np[0]
 
-    # Plot PC variations
-    for name, audio in pc_variations.items():
-        audio_np = audio.squeeze().numpy()
-        if audio_np.ndim > 1:
-            audio_np = audio_np[0]
+                f0, voiced_flag, _ = librosa.pyin(
+                    audio_np,
+                    fmin=80,
+                    fmax=400,
+                    sr=sample_rate
+                )
 
-        f0, voiced_flag, voiced_probs = librosa.pyin(
-            audio_np,
-            fmin=80,
-            fmax=400,
-            sr=sample_rate
-        )
+                ax.plot(times, f0, color=colors[alpha_idx],
+                        label=f'α={alpha:.1f}', alpha=0.7)
 
-        times = librosa.times_like(f0)
-
-        axes[plot_idx].plot(times, f0, label='f0', alpha=0.6)
-        axes[plot_idx].scatter(times[voiced_flag], f0[voiced_flag],
-                               color='r', alpha=0.4, label='voiced')
-
-        title = f'Pitch Contour - {name}'
-        if transcriptions and name in transcriptions:
-            title += f'\n"{transcriptions[name]}"'
-
-        axes[plot_idx].set_title(title)
-        axes[plot_idx].set_ylabel('Frequency (Hz)')
-        axes[plot_idx].set_xlabel('Time (s)')
-        axes[plot_idx].grid(True)
-        axes[plot_idx].legend()
-        plot_idx += 1
+        ax.set_title(f'PC Direction {pc_num} Pitch Contours')
+        ax.set_ylabel('Frequency (Hz)')
+        ax.set_xlabel('Time (s)')
+        ax.grid(True)
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
 
     plt.tight_layout()
     return fig
+
+
+# def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, transcriptions: dict = None):
+#     """
+#     Plot pitch contours for different audio variations using pyin, each in its own row
+#     """
+#     # Separate base variations (clean, masked) from PC variations
+#     base_variations = {k: v for k, v in audio_variations.items() if k in ['clean', 'masked']}
+#     pc_variations = {k: v for k, v in audio_variations.items() if k not in ['clean', 'masked']}
+#
+#     # Calculate total number of plots needed
+#     n_plots = len(audio_variations)
+#     fig, axes = plt.subplots(n_plots, 1, figsize=(15, 4 * n_plots))
+#
+#     # Plot base variations first
+#     plot_idx = 0
+#     for name, audio in base_variations.items():
+#         audio_np = audio.squeeze().numpy()
+#         if audio_np.ndim > 1:
+#             audio_np = audio_np[0]
+#
+#         f0, voiced_flag, voiced_probs = librosa.pyin(
+#             audio_np,
+#             fmin=80,
+#             fmax=400,
+#             sr=sample_rate
+#         )
+#
+#         times = librosa.times_like(f0)
+#
+#         axes[plot_idx].plot(times, f0, label='f0', alpha=0.6)
+#         axes[plot_idx].scatter(times[voiced_flag], f0[voiced_flag],
+#                                color='r', alpha=0.4, label='voiced')
+#
+#         title = f'Pitch Contour - {name}'
+#         if transcriptions and name in transcriptions:
+#             title += f'\n"{transcriptions[name]}"'
+#
+#         axes[plot_idx].set_title(title)
+#         axes[plot_idx].set_ylabel('Frequency (Hz)')
+#         axes[plot_idx].set_xlabel('Time (s)')
+#         axes[plot_idx].grid(True)
+#         axes[plot_idx].legend()
+#         plot_idx += 1
+#
+#     # Plot PC variations
+#     for name, audio in pc_variations.items():
+#         audio_np = audio.squeeze().numpy()
+#         if audio_np.ndim > 1:
+#             audio_np = audio_np[0]
+#
+#         f0, voiced_flag, voiced_probs = librosa.pyin(
+#             audio_np,
+#             fmin=80,
+#             fmax=400,
+#             sr=sample_rate
+#         )
+#
+#         times = librosa.times_like(f0)
+#
+#         axes[plot_idx].plot(times, f0, label='f0', alpha=0.6)
+#         axes[plot_idx].scatter(times[voiced_flag], f0[voiced_flag],
+#                                color='r', alpha=0.4, label='voiced')
+#
+#         title = f'Pitch Contour - {name}'
+#         if transcriptions and name in transcriptions:
+#             title += f'\n"{transcriptions[name]}"'
+#
+#         axes[plot_idx].set_title(title)
+#         axes[plot_idx].set_ylabel('Frequency (Hz)')
+#         axes[plot_idx].set_xlabel('Time (s)')
+#         axes[plot_idx].grid(True)
+#         axes[plot_idx].legend()
+#         plot_idx += 1
+#
+#     plt.tight_layout()
+#     return fig
 
 
 def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_mag, mask, sample_len_seconds,
@@ -186,8 +263,18 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     return fig
 
 
+def get_with_full_audio(clean_audio_full, pred_subsample_audio, metadata):
+    subsample_start_idx = metadata['subsample_start_idx'][0]
+    mask_start_idx = metadata['mask_start_idx'][0]
+    mask_end_idx = metadata['mask_end_idx'][0]
+    pred_audio_full = clean_audio_full
+    pred_audio_full[subsample_start_idx + mask_start_idx: subsample_start_idx + mask_end_idx] = pred_subsample_audio[
+                                                                                                mask_start_idx: mask_end_idx]
+    return pred_audio_full
+
+
 def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, masked_audio,
-                             alphas, save_dir, mean, std, sample_idx,
+                             metadata, alphas, save_dir, mean, std, sample_idx,
                              n_fft=255, hop_length=128, sample_rate=16000):
     """
     Save audio variations, their pitch analyses, and transcriptions
@@ -223,14 +310,26 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
         'masked': masked_audio
     }
 
+    clean_transcription_full = metadata['transcriptions'][0]  ## we assuming only 1 sample in a batch
+    clean_audio_path_ref = metadata['clean_audio_paths'][0]
+    # now read the full audio
+    clean_audio_full = torchaudio.load(clean_audio_path_ref)[0].squeeze(0)
+    clean_path_full = sample_dir / "clean_full.wav"
+    torchaudio.save(clean_path_full, clean_audio_full.unsqueeze(0), sample_rate=sample_rate)
+
     # Save reference audio files and get transcriptions
     clean_path = sample_dir / "clean.wav"
     torchaudio.save(clean_path, clean_audio.unsqueeze(0), sample_rate=sample_rate)
-    transcriptions['clean'] = whisper_model.transcribe(clean_path.as_posix(), language="en")['text']
+    # transcriptions['clean'] = whisper_model.transcribe(clean_path.as_posix(), language="en")['text']
+    transcriptions['clean'] = clean_transcription_full
+
+    masked_audio_path_full = sample_dir / "masked_audio_full.wav"
+    masked_audio_full = get_with_full_audio(clean_audio_full, masked_audio.squeeze(0).squeeze(0), metadata)
+    torchaudio.save(masked_audio_path_full, masked_audio_full.unsqueeze(0), sample_rate=sample_rate)
 
     masked_audio_path = sample_dir / "masked_audio.wav"
     torchaudio.save(masked_audio_path, masked_audio.squeeze(0), sample_rate=sample_rate)
-    transcriptions['masked'] = whisper_model.transcribe(masked_audio_path.as_posix(), language="en")['text']
+    transcriptions['masked'] = whisper_model.transcribe(masked_audio_path_full.as_posix(), language="en")['text']
 
     # Process PC directions
     for i in range(pc_directions_mag.shape[1]):
@@ -255,11 +354,17 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
             # Add to variations dictionary
             variation_name = f'pc{i + 1}_alpha{alpha:.1f}'
             audio_variations[variation_name] = audio
+            # i am going to save also the full audio along side of the sub sample audio
+            # create full audio:
+            curr_full_audio = get_with_full_audio(clean_audio_full, audio, metadata)
+            # save the full audio file
+            audio_path_full = pc_dir / f"alpha_{alpha:.1f}_full.wav"
+            torchaudio.save(audio_path_full, curr_full_audio.unsqueeze(0), sample_rate=sample_rate)
 
             # Save audio file and get transcription
             audio_path = pc_dir / f"alpha_{alpha:.1f}.wav"
             torchaudio.save(audio_path, audio.unsqueeze(0), sample_rate=sample_rate)
-            transcriptions[variation_name] = whisper_model.transcribe(audio_path.as_posix() , language="en")['text']
+            transcriptions[variation_name] = whisper_model.transcribe(audio_path_full.as_posix(), language="en")['text']
 
     # Save transcriptions to a text file
     with open(sample_dir / "transcriptions.txt", "w") as f:
@@ -267,7 +372,8 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
             f.write(f"{name}:\n{text}\n\n")
 
     # Generate and save pitch analysis with transcriptions
-    pitch_fig = plot_pitch_comparison(audio_variations, sample_rate, transcriptions)
+    n_dirs = pc_directions_mag.shape[1]
+    pitch_fig = plot_pitch_comparison(audio_variations, n_dirs, sample_rate)
     pitch_fig.savefig(sample_dir / f"pitch_comparison.png")
     plt.close(pitch_fig)
 
@@ -297,7 +403,7 @@ class NPPCModelValidator:
         self.model.to(self.device)
         self.model.eval()
 
-    def validate_sample(self, masked_spec, mask, clean_spec, masked_audio, sample_len_seconds, sample_idx):
+    def validate_sample(self, masked_spec, mask, clean_spec, masked_audio,metadata, sample_len_seconds, sample_idx):
         """Validate model on a single sample"""
         with torch.no_grad():
             # Move inputs to device
@@ -333,6 +439,7 @@ class NPPCModelValidator:
                 clean_spec.cpu(),
                 mask.cpu(),
                 masked_audio.cpu(),
+                metadata,
                 alphas,
                 audio_save_path,
                 mean.cpu(),
