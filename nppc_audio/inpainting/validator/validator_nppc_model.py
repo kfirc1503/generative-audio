@@ -9,7 +9,9 @@ import numpy as np
 import torchaudio
 import librosa
 import whisper
+from itertools import groupby
 
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor, Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor, Wav2Vec2PhonemeCTCTokenizer  # Added for phoneme recognition
 
 def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: int = 16000):
     """
@@ -263,6 +265,44 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     return fig
 
 
+def process_audio_for_phonemes(audio_tensor, processor, phoneme_model, sample_rate=16000):
+    """Process audio tensor for phoneme recognition"""
+
+    def decode_phonemes(ids, processor, ignore_stress=False):
+        """CTC-like decoding with consecutive duplicates removal"""
+        # Remove consecutive duplicates
+        ids = [id_ for id_, _ in groupby(ids.tolist())]
+
+        # Get special token IDs to skip
+        special_token_ids = processor.tokenizer.all_special_ids + [
+            processor.tokenizer.word_delimiter_token_id
+        ]
+
+        # Convert IDs to phonemes, skipping special tokens
+        phonemes = [processor.decode(id_) for id_ in ids if id_ not in special_token_ids]
+
+        # Join phonemes
+        prediction = " ".join(phonemes)
+
+        # Optionally remove stress marks
+        if ignore_stress:
+            prediction = prediction.replace("ˈ", "").replace("ˌ", "")
+
+        return prediction
+
+    with torch.no_grad():
+        # Process audio
+        inputs = processor(audio_tensor.numpy(), sampling_rate=sample_rate, return_tensors="pt")
+        logits = phoneme_model(inputs.input_values).logits
+        predicted_ids = torch.argmax(logits, dim=-1)
+
+        # Decode phonemes
+        phoneme_sequence = decode_phonemes(predicted_ids[0], processor, ignore_stress=True)
+
+    return phoneme_sequence
+
+
+
 def get_with_full_audio(clean_audio_full, pred_subsample_audio, metadata):
     subsample_start_idx = metadata['subsample_start_idx'][0]
     mask_start_idx = metadata['mask_start_idx'][0]
@@ -285,7 +325,13 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
 
     # Initialize whisper model (using base model for faster inference)
     whisper_model = whisper.load_model("base")
+    model_name = "bookbot/wav2vec2-ljspeech-gruut"  # Changed to a more stable model
+    phoneme_model = Wav2Vec2ForCTC.from_pretrained(model_name, weights_only=True)
+    processor = Wav2Vec2Processor.from_pretrained(model_name)
+
+    phoneme_model.eval()  # Set to evaluation mode
     transcriptions = {}
+    phonemes = {}
 
     # Process clean audio and get transcription
     clean_spec_ref_complex = torch.complex(clean_spec[0, 0], clean_spec[0, 1])
@@ -317,11 +363,11 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     clean_path_full = sample_dir / "clean_full.wav"
     torchaudio.save(clean_path_full, clean_audio_full.unsqueeze(0), sample_rate=sample_rate)
 
-    # Save reference audio files and get transcriptions
+    # Save reference audio files and get transcriptions and phonemes
     clean_path = sample_dir / "clean.wav"
     torchaudio.save(clean_path, clean_audio.unsqueeze(0), sample_rate=sample_rate)
-    # transcriptions['clean'] = whisper_model.transcribe(clean_path.as_posix(), language="en")['text']
     transcriptions['clean'] = clean_transcription_full
+    phonemes['clean'] = process_audio_for_phonemes(clean_audio_full, processor, phoneme_model)
 
     masked_audio_path_full = sample_dir / "masked_audio_full.wav"
     masked_audio_full = get_with_full_audio(clean_audio_full, masked_audio.squeeze(0).squeeze(0), metadata)
@@ -330,6 +376,7 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     masked_audio_path = sample_dir / "masked_audio.wav"
     torchaudio.save(masked_audio_path, masked_audio.squeeze(0), sample_rate=sample_rate)
     transcriptions['masked'] = whisper_model.transcribe(masked_audio_path_full.as_posix(), language="en")['text']
+    phonemes['masked'] = process_audio_for_phonemes(masked_audio_full, processor, phoneme_model)
 
     # Process PC directions
     for i in range(pc_directions_mag.shape[1]):
@@ -354,28 +401,34 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
             # Add to variations dictionary
             variation_name = f'pc{i + 1}_alpha{alpha:.1f}'
             audio_variations[variation_name] = audio
-            # i am going to save also the full audio along side of the sub sample audio
-            # create full audio:
+
+            # Create full audio
             curr_full_audio = get_with_full_audio(clean_audio_full, audio, metadata)
-            # save the full audio file
+
+            # Save the full audio file
             audio_path_full = pc_dir / f"alpha_{alpha:.1f}_full.wav"
             torchaudio.save(audio_path_full, curr_full_audio.unsqueeze(0), sample_rate=sample_rate)
 
-            # Save audio file and get transcription
+            # Save audio file and get transcription and phonemes
             audio_path = pc_dir / f"alpha_{alpha:.1f}.wav"
             torchaudio.save(audio_path, audio.unsqueeze(0), sample_rate=sample_rate)
             transcriptions[variation_name] = whisper_model.transcribe(audio_path_full.as_posix(), language="en")['text']
+            phonemes[variation_name] = process_audio_for_phonemes(curr_full_audio, processor, phoneme_model)
 
-    # Save transcriptions to a text file
-    with open(sample_dir / "transcriptions.txt", "w") as f:
-        for name, text in transcriptions.items():
-            f.write(f"{name}:\n{text}\n\n")
+    # Save transcriptions and phonemes to a text file
+    with open(sample_dir / "transcriptions_and_phonemes.txt", "w") as f:
+        for name in transcriptions.keys():
+            f.write(f"{name}:\n")
+            f.write(f"Transcription: {transcriptions[name]}\n")
+            f.write(f"Phonemes: {phonemes[name]}\n\n")
 
-    # Generate and save pitch analysis with transcriptions
+    # Generate and save pitch analysis
     n_dirs = pc_directions_mag.shape[1]
     pitch_fig = plot_pitch_comparison(audio_variations, n_dirs, sample_rate)
     pitch_fig.savefig(sample_dir / f"pitch_comparison.png")
     plt.close(pitch_fig)
+
+    return {'transcriptions': transcriptions, 'phonemes': phonemes}
 
 
 class NPPCModelValidatorConfig(pydantic.BaseModel):
