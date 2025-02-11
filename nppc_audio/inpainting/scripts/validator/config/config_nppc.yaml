@@ -1,5 +1,5 @@
 # Number of samples to validate
-num_samples_to_validate: 10
+num_samples_to_validate: 8
 
 # Model validator configuration
 model_validator_configuration:
@@ -43,6 +43,7 @@ data_configuration:
     win_length: 255
     hop_length: 128
   use_vad: True
+  is_random_sub_sample: False
 
 # Dataloader configuration
 dataloader_configuration:

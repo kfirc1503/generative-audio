@@ -69,7 +69,7 @@ class AudioInpaintingConfig(pydantic.BaseModel):
     stft_configuration: StftConfig
     use_vad: bool = False  # Whether to use VAD for masking
     seed: Optional[int] = None  # Added seed parameter
-
+    is_random_sub_sample: bool = True
     # Computed fields
     sub_sample_length: int = pydantic.Field(None)
     missing_length: int = pydantic.Field(None)
@@ -282,7 +282,8 @@ class AudioInpaintingDataset(Dataset):
         subsample_start_idx = 0
         if full_audio.shape[1] > self.config.sub_sample_length:
             max_start = full_audio.shape[1] - self.config.sub_sample_length
-            subsample_start_idx = random.randint(0, max_start)
+            if self.config.is_random_sub_sample:
+                subsample_start_idx = random.randint(0, max_start)
             clean_audio = full_audio[:, subsample_start_idx:subsample_start_idx + self.config.sub_sample_length]
         else:
             clean_audio = full_audio
