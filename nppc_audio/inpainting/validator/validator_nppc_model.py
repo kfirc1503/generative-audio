@@ -308,6 +308,9 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                                     extent=[plot_start_time, plot_end_time, 0, pc_directions_mag.shape[-2]])
         axs[row_idx, 0].set_title(f'PC Direction {i + 1} (dB)')
         plt.colorbar(im, ax=axs[row_idx, 0])
+        # Add vertical lines to show mask region
+        axs[row_idx, 0].axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+        axs[row_idx, 0].axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
 
         for j, alpha in enumerate(alphas):
             # Add PC direction to base prediction (zoomed)
@@ -318,6 +321,9 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                                             extent=[plot_start_time, plot_end_time, 0, modified_spec.shape[0]])
             axs[row_idx, j + 1].set_title(f'Base + PC{i + 1} (α={alpha:.1f})')
             plt.colorbar(im, ax=axs[row_idx, j + 1])
+            # Add vertical lines to show mask region
+            axs[row_idx, j + 1].axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+            axs[row_idx, j + 1].axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
 
     plt.tight_layout()
     return fig
