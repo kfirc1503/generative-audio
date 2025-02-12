@@ -11,7 +11,9 @@ import librosa
 import whisper
 from itertools import groupby
 
-from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor, Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor, Wav2Vec2PhonemeCTCTokenizer  # Added for phoneme recognition
+from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor, Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor, \
+    Wav2Vec2PhonemeCTCTokenizer  # Added for phoneme recognition
+
 
 def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: int = 16000):
     """
@@ -90,87 +92,126 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
     return fig
 
 
-# def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, transcriptions: dict = None):
+# def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_mag, mask, sample_len_seconds,
+#                          metadata, max_dirs=None):
 #     """
-#     Plot pitch contours for different audio variations using pyin, each in its own row
+#     Plot spectrograms, error, and PC directions, focusing on the inpainting area and its surroundings
 #     """
-#     # Separate base variations (clean, masked) from PC variations
-#     base_variations = {k: v for k, v in audio_variations.items() if k in ['clean', 'masked']}
-#     pc_variations = {k: v for k, v in audio_variations.items() if k not in ['clean', 'masked']}
+#     n_dirs = pc_directions_mag.shape[1]
+#     if max_dirs is not None:
+#         n_dirs = min(n_dirs, max_dirs)
+#         pc_directions_mag = pc_directions_mag[:, :n_dirs]
 #
-#     # Calculate total number of plots needed
-#     n_plots = len(audio_variations)
-#     fig, axes = plt.subplots(n_plots, 1, figsize=(15, 4 * n_plots))
+#     alphas = torch.arange(-3, 3.5, 0.5)
+#     n_alphas = len(alphas)
+#     n_cols = n_alphas + 1
+#     fig, axs = plt.subplots(1 + n_dirs, n_cols, figsize=(3 * n_cols, 3 * (1 + n_dirs)))
 #
-#     # Plot base variations first
-#     plot_idx = 0
-#     for name, audio in base_variations.items():
-#         audio_np = audio.squeeze().numpy()
-#         if audio_np.ndim > 1:
-#             audio_np = audio_np[0]
+#     vmin, vmax = -3, 3
+#     vmin_err, vmax_err = 0, 3
 #
-#         f0, voiced_flag, voiced_probs = librosa.pyin(
-#             audio_np,
-#             fmin=80,
-#             fmax=400,
-#             sr=sample_rate
-#         )
+#     # Get mask indices in spec domain from metadata
+#     spec_start_idx = metadata['mask_start_frame_idx'][0]
+#     spec_end_idx = metadata['mask_end_frame_idx'][0]
 #
-#         times = librosa.times_like(f0)
+#     # Calculate context window (same duration as mask on each side)
+#     mask_duration = spec_end_idx - spec_start_idx
+#     context_start_idx = max(0, spec_start_idx - mask_duration)
+#     context_end_idx = min(mask.shape[-1], spec_end_idx + mask_duration)
 #
-#         axes[plot_idx].plot(times, f0, label='f0', alpha=0.6)
-#         axes[plot_idx].scatter(times[voiced_flag], f0[voiced_flag],
-#                                color='r', alpha=0.4, label='voiced')
+#     # Calculate time extent for plotting
+#     time_per_column = sample_len_seconds / mask.shape[-1]
+#     plot_start_time = context_start_idx * time_per_column
+#     plot_end_time = context_end_idx * time_per_column
 #
-#         title = f'Pitch Contour - {name}'
-#         if transcriptions and name in transcriptions:
-#             title += f'\n"{transcriptions[name]}"'
+#     # Clean spectrogram
+#     clean_mag_db = clean_spec[0, 0, :, :]
+#     mask = mask.squeeze(1).squeeze(0)
+#     im = axs[0, 0].imshow(clean_mag_db[:, context_start_idx:context_end_idx].numpy(),
+#                           origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+#                           extent=[plot_start_time, plot_end_time, 0, clean_mag_db.shape[0]])
+#     axs[0, 0].set_title('Clean Spectrogram')
+#     plt.colorbar(im, ax=axs[0, 0])
 #
-#         axes[plot_idx].set_title(title)
-#         axes[plot_idx].set_ylabel('Frequency (Hz)')
-#         axes[plot_idx].set_xlabel('Time (s)')
-#         axes[plot_idx].grid(True)
-#         axes[plot_idx].legend()
-#         plot_idx += 1
+#     # Masked spectrogram
+#     masked_mag_db = masked_spec[0, 0, :, :]
+#     im = axs[0, 1].imshow(masked_mag_db[:, context_start_idx:context_end_idx].numpy(),
+#                           origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+#                           extent=[plot_start_time, plot_end_time, 0, masked_mag_db.shape[0]])
+#     axs[0, 1].set_title('Masked Spectrogram')
+#     plt.colorbar(im, ax=axs[0, 1])
 #
-#     # Plot PC variations
-#     for name, audio in pc_variations.items():
-#         audio_np = audio.squeeze().numpy()
-#         if audio_np.ndim > 1:
-#             audio_np = audio_np[0]
+#     # Model output spectrogram
+#     output_mag_db = pred_spec_mag[0, 0, :, :]
+#     im = axs[0, 2].imshow(output_mag_db[:, context_start_idx:context_end_idx].numpy(),
+#                           origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+#                           extent=[plot_start_time, plot_end_time, 0, pred_spec_mag.shape[2]])
+#     axs[0, 2].set_title('Model Output Spectrogram')
+#     plt.colorbar(im, ax=axs[0, 2])
 #
-#         f0, voiced_flag, voiced_probs = librosa.pyin(
-#             audio_np,
-#             fmin=80,
-#             fmax=400,
-#             sr=sample_rate
-#         )
+#     # Plot error
+#     error_db = torch.abs(clean_mag_db - output_mag_db)
+#     im = axs[0, 3].imshow(error_db[:, context_start_idx:context_end_idx].numpy(),
+#                           origin='lower', aspect='auto', vmin=vmin_err, vmax=vmax_err,
+#                           extent=[plot_start_time, plot_end_time, 0, error_db.shape[0]])
+#     axs[0, 3].set_title('Reconstruction Error (dB)')
+#     plt.colorbar(im, ax=axs[0, 3])
 #
-#         times = librosa.times_like(f0)
+#     # Plot zoomed spectrograms
+#     clean_spec_mag_zoom = clean_mag_db[mask == 0]
+#     clean_spec_mag_zoom = clean_spec_mag_zoom.reshape(clean_spec_mag_zoom.shape[-1] // clean_mag_db.shape[0],
+#                                                       clean_mag_db.shape[0])
+#     im = axs[0, 4].imshow(clean_spec_mag_zoom.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+#                           extent=[plot_start_time + mask_duration * time_per_column,
+#                                   plot_start_time + 2 * mask_duration * time_per_column,
+#                                   0, clean_mag_db.shape[0]])
+#     axs[0, 4].set_title('inpainting part clean spec')
+#     plt.colorbar(im, ax=axs[0, 4])
 #
-#         axes[plot_idx].plot(times, f0, label='f0', alpha=0.6)
-#         axes[plot_idx].scatter(times[voiced_flag], f0[voiced_flag],
-#                                color='r', alpha=0.4, label='voiced')
+#     output_spec_mag_zoom = output_mag_db[mask == 0]
+#     output_spec_mag_zoom = output_spec_mag_zoom.reshape(output_spec_mag_zoom.shape[-1] // output_mag_db.shape[0],
+#                                                         output_mag_db.shape[0])
+#     im = axs[0, 5].imshow(output_spec_mag_zoom.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+#                           extent=[plot_start_time + mask_duration * time_per_column,
+#                                   plot_start_time + 2 * mask_duration * time_per_column,
+#                                   0, output_mag_db.shape[0]])
+#     axs[0, 5].set_title('inpainting part predicted spec')
+#     plt.colorbar(im, ax=axs[0, 5])
 #
-#         title = f'Pitch Contour - {name}'
-#         if transcriptions and name in transcriptions:
-#             title += f'\n"{transcriptions[name]}"'
+#     # Remove remaining subplots in first row
+#     for j in range(6, n_cols):
+#         axs[0, j].remove()
 #
-#         axes[plot_idx].set_title(title)
-#         axes[plot_idx].set_ylabel('Frequency (Hz)')
-#         axes[plot_idx].set_xlabel('Time (s)')
-#         axes[plot_idx].grid(True)
-#         axes[plot_idx].legend()
-#         plot_idx += 1
+#     # Plot PC directions and variations
+#     for i in range(n_dirs):
+#         row_idx = i + 1
+#         pc_dir_db = pc_directions_mag[0, i]
+#
+#         # Show the PC direction (zoomed)
+#         im = axs[row_idx, 0].imshow(pc_dir_db[:, context_start_idx:context_end_idx].cpu().numpy(),
+#                                     origin='lower', aspect='auto',
+#                                     vmin=vmin, vmax=vmax,
+#                                     extent=[plot_start_time, plot_end_time, 0, pc_directions_mag.shape[-2]])
+#         axs[row_idx, 0].set_title(f'PC Direction {i + 1} (dB)')
+#         plt.colorbar(im, ax=axs[row_idx, 0])
+#
+#         for j, alpha in enumerate(alphas):
+#             # Add PC direction to base prediction (zoomed)
+#             modified_spec = output_mag_db + alpha * pc_dir_db
+#             im = axs[row_idx, j + 1].imshow(modified_spec[:, context_start_idx:context_end_idx].cpu().numpy(),
+#                                             origin='lower', aspect='auto',
+#                                             vmin=vmin, vmax=vmax,
+#                                             extent=[plot_start_time, plot_end_time, 0, modified_spec.shape[0]])
+#             axs[row_idx, j + 1].set_title(f'Base + PC{i + 1} (α={alpha:.1f})')
+#             plt.colorbar(im, ax=axs[row_idx, j + 1])
 #
 #     plt.tight_layout()
 #     return fig
 
-
 def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_mag, mask, sample_len_seconds,
-                         max_dirs=None):
+                         metadata, max_dirs=None):
     """
-    Plot spectrograms, error, and PC directions
+    Plot spectrograms, error, and PC directions, focusing on the inpainting area and its surroundings
     """
     n_dirs = pc_directions_mag.shape[1]
     if max_dirs is not None:
@@ -185,51 +226,71 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     vmin, vmax = -3, 3
     vmin_err, vmax_err = 0, 3
 
+    # Get mask indices in spec domain from metadata
+    spec_start_idx = metadata['mask_start_frame_idx'][0]
+    spec_end_idx = metadata['mask_end_frame_idx'][0]
+
+    # Calculate context window (same duration as mask on each side)
+    mask_duration = spec_end_idx - spec_start_idx
+    context_start_idx = max(0, spec_start_idx - mask_duration)
+    context_end_idx = min(mask.shape[-1], spec_end_idx + mask_duration)
+
+    # Calculate time extent for plotting
+    time_per_column = sample_len_seconds / mask.shape[-1]
+    plot_start_time = context_start_idx * time_per_column
+    plot_end_time = context_end_idx * time_per_column
+
     # Clean spectrogram
     clean_mag_db = clean_spec[0, 0, :, :]
     mask = mask.squeeze(1).squeeze(0)
-    im = axs[0, 0].imshow(clean_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                          extent=[0, sample_len_seconds, 0, clean_mag_db.shape[0]])
+    im = axs[0, 0].imshow(clean_mag_db[:, context_start_idx:context_end_idx].numpy(),
+                          origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[plot_start_time, plot_end_time, 0, clean_mag_db.shape[0]])
     axs[0, 0].set_title('Clean Spectrogram')
     plt.colorbar(im, ax=axs[0, 0])
 
     # Masked spectrogram
     masked_mag_db = masked_spec[0, 0, :, :]
-    im = axs[0, 1].imshow(masked_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                          extent=[0, sample_len_seconds, 0, masked_mag_db.shape[0]])
+    im = axs[0, 1].imshow(masked_mag_db[:, context_start_idx:context_end_idx].numpy(),
+                          origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[plot_start_time, plot_end_time, 0, masked_mag_db.shape[0]])
     axs[0, 1].set_title('Masked Spectrogram')
     plt.colorbar(im, ax=axs[0, 1])
 
     # Model output spectrogram
     output_mag_db = pred_spec_mag[0, 0, :, :]
-    im = axs[0, 2].imshow(output_mag_db.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                          extent=[0, sample_len_seconds, 0, pred_spec_mag.shape[2]])
+    im = axs[0, 2].imshow(output_mag_db[:, context_start_idx:context_end_idx].numpy(),
+                          origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[plot_start_time, plot_end_time, 0, pred_spec_mag.shape[2]])
     axs[0, 2].set_title('Model Output Spectrogram')
     plt.colorbar(im, ax=axs[0, 2])
 
     # Plot error
     error_db = torch.abs(clean_mag_db - output_mag_db)
-    im = axs[0, 3].imshow(error_db.numpy(), origin='lower', aspect='auto', vmin=vmin_err, vmax=vmax_err,
-                          extent=[0, sample_len_seconds, 0, error_db.shape[0]])
+    im = axs[0, 3].imshow(error_db[:, context_start_idx:context_end_idx].numpy(),
+                          origin='lower', aspect='auto', vmin=vmin_err, vmax=vmax_err,
+                          extent=[plot_start_time, plot_end_time, 0, error_db.shape[0]])
     axs[0, 3].set_title('Reconstruction Error (dB)')
     plt.colorbar(im, ax=axs[0, 3])
 
-    # Plot zoomed spectrograms
-    clean_spec_mag_zoom = clean_mag_db[mask == 0]
-    clean_spec_mag_zoom = clean_spec_mag_zoom.reshape(clean_spec_mag_zoom.shape[-1] // clean_mag_db.shape[0],
-                                                      clean_mag_db.shape[0])
-    im = axs[0, 4].imshow(clean_spec_mag_zoom.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                          extent=[0.4, 0.528, 0, clean_mag_db.shape[0]])
-    axs[0, 4].set_title('inpainting part clean spec')
+    # Plot clean and output specs with context (replacing the zoomed versions)
+    im = axs[0, 4].imshow(clean_mag_db[:, context_start_idx:context_end_idx].numpy(),
+                          origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[plot_start_time, plot_end_time, 0, clean_mag_db.shape[0]])
+    axs[0, 4].set_title('Clean Spec (Inpainting Region)')
     plt.colorbar(im, ax=axs[0, 4])
+    # Add vertical lines to show mask region
+    axs[0, 4].axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+    axs[0, 4].axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
 
-    output_spec_mag_zoom = output_mag_db[mask == 0]
-    output_spec_mag_zoom = output_spec_mag_zoom.reshape(output_spec_mag_zoom.shape[-1] // output_mag_db.shape[0],
-                                                        output_mag_db.shape[0])
-    im = axs[0, 5].imshow(output_spec_mag_zoom.numpy(), origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
-                          extent=[0.4, 0.528, 0, output_mag_db.shape[0]])
-    axs[0, 5].set_title('inpainting part predicted spec')
+    im = axs[0, 5].imshow(output_mag_db[:, context_start_idx:context_end_idx].numpy(),
+                          origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
+                          extent=[plot_start_time, plot_end_time, 0, output_mag_db.shape[0]])
+    axs[0, 5].set_title('Output Spec (Inpainting Region)')
     plt.colorbar(im, ax=axs[0, 5])
+    # Add vertical lines to show mask region
+    axs[0, 5].axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+    axs[0, 5].axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
 
     # Remove remaining subplots in first row
     for j in range(6, n_cols):
@@ -240,25 +301,26 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
         row_idx = i + 1
         pc_dir_db = pc_directions_mag[0, i]
 
-        # Show the full PC direction
-        im = axs[row_idx, 0].imshow(pc_dir_db.cpu().numpy(), origin='lower', aspect='auto',
+        # Show the PC direction (zoomed)
+        im = axs[row_idx, 0].imshow(pc_dir_db[:, context_start_idx:context_end_idx].cpu().numpy(),
+                                    origin='lower', aspect='auto',
                                     vmin=vmin, vmax=vmax,
-                                    extent=[0, sample_len_seconds, 0, pc_directions_mag.shape[-2]])
+                                    extent=[plot_start_time, plot_end_time, 0, pc_directions_mag.shape[-2]])
         axs[row_idx, 0].set_title(f'PC Direction {i + 1} (dB)')
         plt.colorbar(im, ax=axs[row_idx, 0])
 
         for j, alpha in enumerate(alphas):
-            # Add PC direction to base prediction (full signal)
+            # Add PC direction to base prediction (zoomed)
             modified_spec = output_mag_db + alpha * pc_dir_db
-            im = axs[row_idx, j + 1].imshow(modified_spec.cpu().numpy(), origin='lower', aspect='auto',
+            im = axs[row_idx, j + 1].imshow(modified_spec[:, context_start_idx:context_end_idx].cpu().numpy(),
+                                            origin='lower', aspect='auto',
                                             vmin=vmin, vmax=vmax,
-                                            extent=[0, sample_len_seconds, 0, modified_spec.shape[0]])
+                                            extent=[plot_start_time, plot_end_time, 0, modified_spec.shape[0]])
             axs[row_idx, j + 1].set_title(f'Base + PC{i + 1} (α={alpha:.1f})')
             plt.colorbar(im, ax=axs[row_idx, j + 1])
 
     plt.tight_layout()
     return fig
-
 
 def process_audio_for_phonemes(audio_tensor, processor, phoneme_model, sample_rate=16000):
     """Process audio tensor for phoneme recognition"""
@@ -297,7 +359,6 @@ def process_audio_for_phonemes(audio_tensor, processor, phoneme_model, sample_ra
     return phoneme_sequence
 
 
-
 def get_with_full_audio(clean_audio_full, pred_subsample_audio, metadata):
     subsample_start_idx = metadata['subsample_start_idx'][0]
     mask_start_idx = metadata['mask_start_idx'][0]
@@ -308,127 +369,9 @@ def get_with_full_audio(clean_audio_full, pred_subsample_audio, metadata):
     return pred_audio_full
 
 
-# def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, masked_audio,
-#                              metadata, alphas, save_dir, mean, std, sample_idx,
-#                              n_fft=255, hop_length=128, sample_rate=16000):
-#     """
-#     Save audio variations, their pitch analyses, and transcriptions
-#     """
-#     # Create sample-specific directory
-#     sample_dir = Path(save_dir) / f"sample_{sample_idx}"
-#     sample_dir.mkdir(parents=True, exist_ok=True)
-#
-#     # Initialize whisper model (using base model for faster inference)
-#     whisper_model = whisper.load_model("base")
-#     model_name = "bookbot/wav2vec2-ljspeech-gruut"  # Changed to a more stable model
-#     phoneme_model = Wav2Vec2ForCTC.from_pretrained(model_name, weights_only=True)
-#     processor = Wav2Vec2Processor.from_pretrained(model_name)
-#
-#     phoneme_model.eval()  # Set to evaluation mode
-#     transcriptions = {}
-#     phonemes = {}
-#
-#     # Process clean audio and get transcription
-#     clean_spec_ref_complex = torch.complex(clean_spec[0, 0], clean_spec[0, 1])
-#     clean_phase = torch.angle(clean_spec_ref_complex)
-#     window = torch.hann_window(n_fft).to(clean_phase.device)
-#
-#     clean_mag_log = clean_spec_mag_norm_log[0, 0] * std + mean
-#     clean_mag_linear = torch.exp(clean_mag_log) - 1e-6
-#     real_part = clean_mag_linear * torch.cos(clean_phase)
-#     imag_part = clean_mag_linear * torch.sin(clean_phase)
-#     complex_clean_spec = torch.complex(real_part, imag_part)
-#
-#     clean_audio = torch.istft(complex_clean_spec,
-#                               n_fft=n_fft,
-#                               hop_length=hop_length,
-#                               win_length=n_fft,
-#                               window=window)
-#
-#     # Initialize audio variations dictionary
-#     audio_variations = {
-#         'clean': clean_audio,
-#         'masked': masked_audio
-#     }
-#
-#     clean_transcription_full = metadata['transcriptions'][0]  ## we assuming only 1 sample in a batch
-#     clean_audio_path_ref = metadata['clean_audio_paths'][0]
-#     # now read the full audio
-#     clean_audio_full = torchaudio.load(clean_audio_path_ref)[0].squeeze(0)
-#     clean_path_full = sample_dir / "clean_full.wav"
-#     torchaudio.save(clean_path_full, clean_audio_full.unsqueeze(0), sample_rate=sample_rate)
-#
-#     # Save reference audio files and get transcriptions and phonemes
-#     clean_path = sample_dir / "clean.wav"
-#     torchaudio.save(clean_path, clean_audio.unsqueeze(0), sample_rate=sample_rate)
-#     transcriptions['clean'] = clean_transcription_full
-#     phonemes['clean'] = process_audio_for_phonemes(clean_audio_full, processor, phoneme_model)
-#
-#     masked_audio_path_full = sample_dir / "masked_audio_full.wav"
-#     masked_audio_full = get_with_full_audio(clean_audio_full, masked_audio.squeeze(0).squeeze(0), metadata)
-#     torchaudio.save(masked_audio_path_full, masked_audio_full.unsqueeze(0), sample_rate=sample_rate)
-#
-#     masked_audio_path = sample_dir / "masked_audio.wav"
-#     torchaudio.save(masked_audio_path, masked_audio.squeeze(0), sample_rate=sample_rate)
-#     transcriptions['masked'] = whisper_model.transcribe(masked_audio_path_full.as_posix(), language="en")['text']
-#     phonemes['masked'] = process_audio_for_phonemes(masked_audio_full, processor, phoneme_model)
-#
-#     # Process PC directions
-#     for i in range(pc_directions_mag.shape[1]):
-#         pc_dir = sample_dir / f"pc_{i + 1}"
-#         pc_dir.mkdir(exist_ok=True)
-#         pc_dir_db = pc_directions_mag[0, i]
-#
-#         for alpha in alphas:
-#             modified_mag = pred_spec_mag[0, 0] + alpha * pc_dir_db
-#             modified_mag_log = modified_mag * std + mean
-#             modified_mag_linear = torch.exp(modified_mag_log)
-#             real_part = modified_mag_linear * torch.cos(clean_phase)
-#             imag_part = modified_mag_linear * torch.sin(clean_phase)
-#             modified_complex = torch.complex(real_part, imag_part)
-#
-#             audio = torch.istft(modified_complex,
-#                                 n_fft=n_fft,
-#                                 hop_length=hop_length,
-#                                 win_length=n_fft,
-#                                 window=window)
-#
-#             # Add to variations dictionary
-#             variation_name = f'pc{i + 1}_alpha{alpha:.1f}'
-#             audio_variations[variation_name] = audio
-#
-#             # Create full audio
-#             curr_full_audio = get_with_full_audio(clean_audio_full, audio, metadata)
-#
-#             # Save the full audio file
-#             audio_path_full = pc_dir / f"alpha_{alpha:.1f}_full.wav"
-#             torchaudio.save(audio_path_full, curr_full_audio.unsqueeze(0), sample_rate=sample_rate)
-#
-#             # Save audio file and get transcription and phonemes
-#             audio_path = pc_dir / f"alpha_{alpha:.1f}.wav"
-#             torchaudio.save(audio_path, audio.unsqueeze(0), sample_rate=sample_rate)
-#             transcriptions[variation_name] = whisper_model.transcribe(audio_path_full.as_posix(), language="en")['text']
-#             phonemes[variation_name] = process_audio_for_phonemes(curr_full_audio, processor, phoneme_model)
-#
-#     # Save transcriptions and phonemes to a text file
-#     with open(sample_dir / "transcriptions_and_phonemes.txt", "w") as f:
-#         for name in transcriptions.keys():
-#             f.write(f"{name}:\n")
-#             f.write(f"Transcription: {transcriptions[name]}\n")
-#             f.write(f"Phonemes: {phonemes[name]}\n\n")
-#
-#     # Generate and save pitch analysis
-#     n_dirs = pc_directions_mag.shape[1]
-#     pitch_fig = plot_pitch_comparison(audio_variations, n_dirs, sample_rate)
-#     pitch_fig.savefig(sample_dir / f"pitch_comparison.png")
-#     plt.close(pitch_fig)
-#
-#     return {'transcriptions': transcriptions, 'phonemes': phonemes}
-
-
 def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, masked_audio,
                              metadata, alphas, save_dir, mean, std, sample_idx,
-                             n_fft=255, hop_length=128, sample_rate=16000, analyze_phonemes=True):
+                             n_fft=255, hop_length=128, sample_rate=16000, analyze_phonemes=False):
     """
     Save audio variations, their pitch analyses, and transcriptions
     """
@@ -576,7 +519,7 @@ class NPPCModelValidator:
         self.model.to(self.device)
         self.model.eval()
 
-    def validate_sample(self, masked_spec, mask, clean_spec, masked_audio,metadata, sample_len_seconds, sample_idx):
+    def validate_sample(self, masked_spec, mask, clean_spec, masked_audio, metadata, sample_len_seconds, sample_idx):
         """Validate model on a single sample"""
         with torch.no_grad():
             # Move inputs to device
@@ -599,6 +542,7 @@ class NPPCModelValidator:
                 pc_directions.cpu(),
                 mask.cpu(),
                 sample_len_seconds,
+                metadata,
                 max_dirs=self.config.max_dirs_to_plot
             )
 
