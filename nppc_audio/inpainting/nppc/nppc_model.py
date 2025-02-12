@@ -92,6 +92,7 @@ class NPPCModel(nn.Module):
 
         # Load pretrained model (either from wandb or local path)
         if config.wandb_config:
+            # wandb.init(mode="offline")
             self._load_from_wandb()
         elif config.pretrained_restoration_model_path:
             self._load_from_local()

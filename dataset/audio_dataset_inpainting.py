@@ -26,7 +26,8 @@ class AudioInpaintingSample:
     # Mask information
     mask_start_idx: int  # Start index of the masked region
     mask_end_idx: int  # End index of the masked region
-
+    mask_start_frame_idx: int
+    mask_end_frame_idx: int
     # LibriSpeech metadata
     transcription: str
     sample_rate: int = 16000
@@ -304,6 +305,12 @@ class AudioInpaintingDataset(Dataset):
 
         # Convert the mask into a spec mask
         mask_frames = self.time_to_spec_mask(mask, stft_clean.shape[3], masked_audio.shape[1])
+
+        # Find the start and end frames (where mask_frames is 0)
+        zero_frames = torch.where(mask_frames == 0)[0]
+        mask_start_frame = zero_frames[0].item()
+        mask_end_frame = zero_frames[-1].item()
+
         mask_expand = mask_frames.unsqueeze(0).unsqueeze(1).unsqueeze(2)
         mask_expand = mask_expand.expand(-1, stft_clean.shape[1], stft_clean.shape[2], -1)
         stft_masked = stft_clean * mask_expand
@@ -319,6 +326,8 @@ class AudioInpaintingDataset(Dataset):
             subsample_start_idx=subsample_start_idx,
             mask_start_idx=mask_start_idx,
             mask_end_idx=mask_end_idx,
+            mask_start_frame_idx=mask_start_frame,
+            mask_end_frame_idx=mask_end_frame,
             transcription=transcription,
             sample_rate=self.config.sample_rate
         )

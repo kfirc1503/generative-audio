@@ -209,11 +209,8 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
 
     # Plot error
     error_db = torch.abs(clean_mag_db - output_mag_db)
-    error_db_relevant_part = error_db[mask == 0]
-    error_db_relevant_part = error_db_relevant_part.reshape(error_db_relevant_part.shape[-1] // error_db.shape[0],
-                                                            error_db.shape[0])
-    im = axs[0, 3].imshow(error_db_relevant_part.numpy(), origin='lower', aspect='auto', vmin=vmin_err, vmax=vmax_err,
-                          extent=[0.4, 0.528, 0, error_db.shape[0]])
+    im = axs[0, 3].imshow(error_db.numpy(), origin='lower', aspect='auto', vmin=vmin_err, vmax=vmax_err,
+                          extent=[0, sample_len_seconds, 0, error_db.shape[0]])
     axs[0, 3].set_title('Reconstruction Error (dB)')
     plt.colorbar(im, ax=axs[0, 3])
 
@@ -242,23 +239,21 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     for i in range(n_dirs):
         row_idx = i + 1
         pc_dir_db = pc_directions_mag[0, i]
-        pc_dir_db_relevant_part = pc_dir_db[mask == 0]
-        pc_dir_db_relevant_part = pc_dir_db_relevant_part.reshape(
-            pc_dir_db_relevant_part.shape[-1] // pc_dir_db.shape[0],
-            pc_dir_db.shape[0])
 
-        im = axs[row_idx, 0].imshow(pc_dir_db_relevant_part.cpu().numpy(), origin='lower', aspect='auto',
+        # Show the full PC direction
+        im = axs[row_idx, 0].imshow(pc_dir_db.cpu().numpy(), origin='lower', aspect='auto',
                                     vmin=vmin, vmax=vmax,
-                                    extent=[0.4, 0.528, 0, pc_directions_mag.shape[-2]])
+                                    extent=[0, sample_len_seconds, 0, pc_directions_mag.shape[-2]])
         axs[row_idx, 0].set_title(f'PC Direction {i + 1} (dB)')
         plt.colorbar(im, ax=axs[row_idx, 0])
 
         for j, alpha in enumerate(alphas):
-            modified_error = torch.abs(error_db_relevant_part + alpha * pc_dir_db_relevant_part)
-            im = axs[row_idx, j + 1].imshow(modified_error.cpu().numpy(), origin='lower', aspect='auto',
-                                            vmin=vmin_err, vmax=vmax_err,
-                                            extent=[0.4, 0.528, 0, modified_error.shape[0]])
-            axs[row_idx, j + 1].set_title(f'α={alpha:.1f}')
+            # Add PC direction to base prediction (full signal)
+            modified_spec = output_mag_db + alpha * pc_dir_db
+            im = axs[row_idx, j + 1].imshow(modified_spec.cpu().numpy(), origin='lower', aspect='auto',
+                                            vmin=vmin, vmax=vmax,
+                                            extent=[0, sample_len_seconds, 0, modified_spec.shape[0]])
+            axs[row_idx, j + 1].set_title(f'Base + PC{i + 1} (α={alpha:.1f})')
             plt.colorbar(im, ax=axs[row_idx, j + 1])
 
     plt.tight_layout()
@@ -313,9 +308,127 @@ def get_with_full_audio(clean_audio_full, pred_subsample_audio, metadata):
     return pred_audio_full
 
 
+# def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, masked_audio,
+#                              metadata, alphas, save_dir, mean, std, sample_idx,
+#                              n_fft=255, hop_length=128, sample_rate=16000):
+#     """
+#     Save audio variations, their pitch analyses, and transcriptions
+#     """
+#     # Create sample-specific directory
+#     sample_dir = Path(save_dir) / f"sample_{sample_idx}"
+#     sample_dir.mkdir(parents=True, exist_ok=True)
+#
+#     # Initialize whisper model (using base model for faster inference)
+#     whisper_model = whisper.load_model("base")
+#     model_name = "bookbot/wav2vec2-ljspeech-gruut"  # Changed to a more stable model
+#     phoneme_model = Wav2Vec2ForCTC.from_pretrained(model_name, weights_only=True)
+#     processor = Wav2Vec2Processor.from_pretrained(model_name)
+#
+#     phoneme_model.eval()  # Set to evaluation mode
+#     transcriptions = {}
+#     phonemes = {}
+#
+#     # Process clean audio and get transcription
+#     clean_spec_ref_complex = torch.complex(clean_spec[0, 0], clean_spec[0, 1])
+#     clean_phase = torch.angle(clean_spec_ref_complex)
+#     window = torch.hann_window(n_fft).to(clean_phase.device)
+#
+#     clean_mag_log = clean_spec_mag_norm_log[0, 0] * std + mean
+#     clean_mag_linear = torch.exp(clean_mag_log) - 1e-6
+#     real_part = clean_mag_linear * torch.cos(clean_phase)
+#     imag_part = clean_mag_linear * torch.sin(clean_phase)
+#     complex_clean_spec = torch.complex(real_part, imag_part)
+#
+#     clean_audio = torch.istft(complex_clean_spec,
+#                               n_fft=n_fft,
+#                               hop_length=hop_length,
+#                               win_length=n_fft,
+#                               window=window)
+#
+#     # Initialize audio variations dictionary
+#     audio_variations = {
+#         'clean': clean_audio,
+#         'masked': masked_audio
+#     }
+#
+#     clean_transcription_full = metadata['transcriptions'][0]  ## we assuming only 1 sample in a batch
+#     clean_audio_path_ref = metadata['clean_audio_paths'][0]
+#     # now read the full audio
+#     clean_audio_full = torchaudio.load(clean_audio_path_ref)[0].squeeze(0)
+#     clean_path_full = sample_dir / "clean_full.wav"
+#     torchaudio.save(clean_path_full, clean_audio_full.unsqueeze(0), sample_rate=sample_rate)
+#
+#     # Save reference audio files and get transcriptions and phonemes
+#     clean_path = sample_dir / "clean.wav"
+#     torchaudio.save(clean_path, clean_audio.unsqueeze(0), sample_rate=sample_rate)
+#     transcriptions['clean'] = clean_transcription_full
+#     phonemes['clean'] = process_audio_for_phonemes(clean_audio_full, processor, phoneme_model)
+#
+#     masked_audio_path_full = sample_dir / "masked_audio_full.wav"
+#     masked_audio_full = get_with_full_audio(clean_audio_full, masked_audio.squeeze(0).squeeze(0), metadata)
+#     torchaudio.save(masked_audio_path_full, masked_audio_full.unsqueeze(0), sample_rate=sample_rate)
+#
+#     masked_audio_path = sample_dir / "masked_audio.wav"
+#     torchaudio.save(masked_audio_path, masked_audio.squeeze(0), sample_rate=sample_rate)
+#     transcriptions['masked'] = whisper_model.transcribe(masked_audio_path_full.as_posix(), language="en")['text']
+#     phonemes['masked'] = process_audio_for_phonemes(masked_audio_full, processor, phoneme_model)
+#
+#     # Process PC directions
+#     for i in range(pc_directions_mag.shape[1]):
+#         pc_dir = sample_dir / f"pc_{i + 1}"
+#         pc_dir.mkdir(exist_ok=True)
+#         pc_dir_db = pc_directions_mag[0, i]
+#
+#         for alpha in alphas:
+#             modified_mag = pred_spec_mag[0, 0] + alpha * pc_dir_db
+#             modified_mag_log = modified_mag * std + mean
+#             modified_mag_linear = torch.exp(modified_mag_log)
+#             real_part = modified_mag_linear * torch.cos(clean_phase)
+#             imag_part = modified_mag_linear * torch.sin(clean_phase)
+#             modified_complex = torch.complex(real_part, imag_part)
+#
+#             audio = torch.istft(modified_complex,
+#                                 n_fft=n_fft,
+#                                 hop_length=hop_length,
+#                                 win_length=n_fft,
+#                                 window=window)
+#
+#             # Add to variations dictionary
+#             variation_name = f'pc{i + 1}_alpha{alpha:.1f}'
+#             audio_variations[variation_name] = audio
+#
+#             # Create full audio
+#             curr_full_audio = get_with_full_audio(clean_audio_full, audio, metadata)
+#
+#             # Save the full audio file
+#             audio_path_full = pc_dir / f"alpha_{alpha:.1f}_full.wav"
+#             torchaudio.save(audio_path_full, curr_full_audio.unsqueeze(0), sample_rate=sample_rate)
+#
+#             # Save audio file and get transcription and phonemes
+#             audio_path = pc_dir / f"alpha_{alpha:.1f}.wav"
+#             torchaudio.save(audio_path, audio.unsqueeze(0), sample_rate=sample_rate)
+#             transcriptions[variation_name] = whisper_model.transcribe(audio_path_full.as_posix(), language="en")['text']
+#             phonemes[variation_name] = process_audio_for_phonemes(curr_full_audio, processor, phoneme_model)
+#
+#     # Save transcriptions and phonemes to a text file
+#     with open(sample_dir / "transcriptions_and_phonemes.txt", "w") as f:
+#         for name in transcriptions.keys():
+#             f.write(f"{name}:\n")
+#             f.write(f"Transcription: {transcriptions[name]}\n")
+#             f.write(f"Phonemes: {phonemes[name]}\n\n")
+#
+#     # Generate and save pitch analysis
+#     n_dirs = pc_directions_mag.shape[1]
+#     pitch_fig = plot_pitch_comparison(audio_variations, n_dirs, sample_rate)
+#     pitch_fig.savefig(sample_dir / f"pitch_comparison.png")
+#     plt.close(pitch_fig)
+#
+#     return {'transcriptions': transcriptions, 'phonemes': phonemes}
+
+
 def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, masked_audio,
                              metadata, alphas, save_dir, mean, std, sample_idx,
-                             n_fft=255, hop_length=128, sample_rate=16000):
+                             n_fft=255, hop_length=128, sample_rate=16000, analyze_phonemes=True):
     """
     Save audio variations, their pitch analyses, and transcriptions
     """
@@ -325,13 +438,16 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
 
     # Initialize whisper model (using base model for faster inference)
     whisper_model = whisper.load_model("base")
-    model_name = "bookbot/wav2vec2-ljspeech-gruut"  # Changed to a more stable model
-    phoneme_model = Wav2Vec2ForCTC.from_pretrained(model_name, weights_only=True)
-    processor = Wav2Vec2Processor.from_pretrained(model_name)
 
-    phoneme_model.eval()  # Set to evaluation mode
+    # Initialize phoneme model only if needed
+    if analyze_phonemes:
+        model_name = "bookbot/wav2vec2-ljspeech-gruut"
+        phoneme_model = Wav2Vec2ForCTC.from_pretrained(model_name, weights_only=True)
+        processor = Wav2Vec2Processor.from_pretrained(model_name)
+        phoneme_model.eval()
+
     transcriptions = {}
-    phonemes = {}
+    phonemes = {} if analyze_phonemes else None
 
     # Process clean audio and get transcription
     clean_spec_ref_complex = torch.complex(clean_spec[0, 0], clean_spec[0, 1])
@@ -356,9 +472,8 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
         'masked': masked_audio
     }
 
-    clean_transcription_full = metadata['transcriptions'][0]  ## we assuming only 1 sample in a batch
+    clean_transcription_full = metadata['transcriptions'][0]
     clean_audio_path_ref = metadata['clean_audio_paths'][0]
-    # now read the full audio
     clean_audio_full = torchaudio.load(clean_audio_path_ref)[0].squeeze(0)
     clean_path_full = sample_dir / "clean_full.wav"
     torchaudio.save(clean_path_full, clean_audio_full.unsqueeze(0), sample_rate=sample_rate)
@@ -367,7 +482,8 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     clean_path = sample_dir / "clean.wav"
     torchaudio.save(clean_path, clean_audio.unsqueeze(0), sample_rate=sample_rate)
     transcriptions['clean'] = clean_transcription_full
-    phonemes['clean'] = process_audio_for_phonemes(clean_audio_full, processor, phoneme_model)
+    if analyze_phonemes:
+        phonemes['clean'] = process_audio_for_phonemes(clean_audio_full, processor, phoneme_model)
 
     masked_audio_path_full = sample_dir / "masked_audio_full.wav"
     masked_audio_full = get_with_full_audio(clean_audio_full, masked_audio.squeeze(0).squeeze(0), metadata)
@@ -376,7 +492,8 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     masked_audio_path = sample_dir / "masked_audio.wav"
     torchaudio.save(masked_audio_path, masked_audio.squeeze(0), sample_rate=sample_rate)
     transcriptions['masked'] = whisper_model.transcribe(masked_audio_path_full.as_posix(), language="en")['text']
-    phonemes['masked'] = process_audio_for_phonemes(masked_audio_full, processor, phoneme_model)
+    if analyze_phonemes:
+        phonemes['masked'] = process_audio_for_phonemes(masked_audio_full, processor, phoneme_model)
 
     # Process PC directions
     for i in range(pc_directions_mag.shape[1]):
@@ -413,14 +530,17 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
             audio_path = pc_dir / f"alpha_{alpha:.1f}.wav"
             torchaudio.save(audio_path, audio.unsqueeze(0), sample_rate=sample_rate)
             transcriptions[variation_name] = whisper_model.transcribe(audio_path_full.as_posix(), language="en")['text']
-            phonemes[variation_name] = process_audio_for_phonemes(curr_full_audio, processor, phoneme_model)
+            if analyze_phonemes:
+                phonemes[variation_name] = process_audio_for_phonemes(curr_full_audio, processor, phoneme_model)
 
     # Save transcriptions and phonemes to a text file
     with open(sample_dir / "transcriptions_and_phonemes.txt", "w") as f:
         for name in transcriptions.keys():
             f.write(f"{name}:\n")
             f.write(f"Transcription: {transcriptions[name]}\n")
-            f.write(f"Phonemes: {phonemes[name]}\n\n")
+            if analyze_phonemes:
+                f.write(f"Phonemes: {phonemes[name]}\n")
+            f.write("\n")
 
     # Generate and save pitch analysis
     n_dirs = pc_directions_mag.shape[1]

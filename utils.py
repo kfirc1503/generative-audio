@@ -319,6 +319,8 @@ def collate_fn(batch: List[Any]):
         "subsample_start_idx": [b.subsample_start_idx for b in batch],
         "mask_start_idx": [b.mask_start_idx for b in batch],
         "mask_end_idx": [b.mask_end_idx for b in batch],
+        "mask_start_frame_idx": [b.mask_start_frame_idx for b in batch],
+        "mask_end_frame_idx": [b.mask_end_frame_idx for b in batch],
         "transcriptions": [b.transcription for b in batch],
         "sample_rates": [b.sample_rate for b in batch],
     }

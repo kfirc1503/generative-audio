@@ -15,7 +15,7 @@ model_validator_configuration:
       in_channels: 1
       out_channels: 1
 
-    # Wandb configuration for loading the pretrained model
+#    # Wandb configuration for loading the pretrained model
     wandb_config:
       entity: "kfirc-tel-aviv-university"
       project: "generative-audio"
@@ -23,7 +23,7 @@ model_validator_configuration:
       artifact_version: "latest"
       checkpoint_filename: "checkpoint_final_20250130_221935.pt"
 
-#    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250118_003032.pt"
+#    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250130_221935.pt"
     audio_pc_wrapper_configuration:
       n_dirs: 5
       model_configuration:
