@@ -15,7 +15,8 @@ from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor, Wav2Vec2CTCTokenizer
     Wav2Vec2PhonemeCTCTokenizer  # Added for phoneme recognition
 
 
-def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: int = 16000):
+def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: int = 16000, save_dir=None,
+                          sample_idx=None):
     """
     Plot pitch contours comparing clean audio with PC variations.
     First subplot shows clean reference, followed by one subplot per PC direction.
@@ -24,7 +25,14 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
         audio_variations: Dictionary containing clean audio and PC variations
         n_dirs: Number of PC directions to plot
         sample_rate: Audio sample rate in Hz
+        save_dir: Directory to save individual plots (optional)
+        sample_idx: Sample index for directory naming (optional)
     """
+    # Create directory for individual pitch plots if save_dir is provided
+    if save_dir is not None and sample_idx is not None:
+        sample_dir = Path(save_dir) / f"sample_{sample_idx}" / "pitch_contours"
+        sample_dir.mkdir(parents=True, exist_ok=True)
+
     # Get clean audio as reference
     clean_audio = audio_variations['clean']
 
@@ -87,6 +95,42 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
         ax.set_xlabel('Time (s)')
         ax.grid(True)
         ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+
+        # Save individual PC plot if save_dir is provided
+        if save_dir is not None:
+            fig_pc = plt.figure(figsize=(15, 4))
+            ax_pc = fig_pc.add_subplot(111)
+
+            # Plot clean reference
+            ax_pc.plot(times, f0_clean, color='black', label='Clean', linewidth=2)
+
+            # Plot all alpha variations for this PC
+            for alpha_idx, alpha in enumerate(unique_alphas):
+                variation_key = f'pc{pc_num}_alpha{alpha:.1f}'
+                if variation_key in audio_variations:
+                    audio = audio_variations[variation_key]
+                    audio_np = audio.squeeze().numpy()
+                    if audio_np.ndim > 1:
+                        audio_np = audio_np[0]
+
+                    f0, voiced_flag, _ = librosa.pyin(
+                        audio_np,
+                        fmin=80,
+                        fmax=400,
+                        sr=sample_rate
+                    )
+                    ax_pc.plot(times, f0, color=colors[alpha_idx],
+                               label=f'α={alpha:.1f}', alpha=0.7)
+
+            ax_pc.set_title(f'PC Direction {pc_num} Pitch Contours')
+            ax_pc.set_ylabel('Frequency (Hz)')
+            ax_pc.set_xlabel('Time (s)')
+            ax_pc.grid(True)
+            ax_pc.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+
+            fig_pc.tight_layout()
+            fig_pc.savefig(sample_dir / f'pc_{pc_num}_pitch.png', bbox_inches='tight')
+            plt.close(fig_pc)
 
     plt.tight_layout()
     return fig
@@ -209,10 +253,14 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
 #     return fig
 
 def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_mag, mask, sample_len_seconds,
-                         metadata, max_dirs=None):
+                         metadata, save_dir, sample_idx, max_dirs=None):
     """
     Plot spectrograms, error, and PC directions, focusing on the inpainting area and its surroundings
     """
+    # Create directory for individual spectrograms
+    sample_dir = Path(save_dir) / f"sample_{sample_idx}" / "spectrograms"
+    sample_dir.mkdir(parents=True, exist_ok=True)
+
     n_dirs = pc_directions_mag.shape[1]
     if max_dirs is not None:
         n_dirs = min(n_dirs, max_dirs)
@@ -240,6 +288,25 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     plot_start_time = context_start_idx * time_per_column
     plot_end_time = context_end_idx * time_per_column
 
+    def save_individual_spectrogram(data, title, filename):
+        """Helper function to save individual spectrograms"""
+        fig_single, ax = plt.subplots(figsize=(10, 6))
+        im = ax.imshow(data, origin='lower', aspect='auto',
+                       vmin=vmin if 'error' not in filename else vmin_err,
+                       vmax=vmax if 'error' not in filename else vmax_err,
+                       extent=[plot_start_time, plot_end_time, 0, data.shape[0]])
+        ax.set_title(title)
+        plt.colorbar(im, ax=ax)
+
+        # Add vertical lines to show mask region if needed
+        if not filename.startswith('pc_direction'):
+            ax.axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+            ax.axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+
+        plt.tight_layout()
+        fig_single.savefig(sample_dir / filename)
+        plt.close(fig_single)
+
     # Clean spectrogram
     clean_mag_db = clean_spec[0, 0, :, :]
     mask = mask.squeeze(1).squeeze(0)
@@ -248,6 +315,12 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                           extent=[plot_start_time, plot_end_time, 0, clean_mag_db.shape[0]])
     axs[0, 0].set_title('Clean Spectrogram')
     plt.colorbar(im, ax=axs[0, 0])
+    # Save individual clean spectrogram
+    save_individual_spectrogram(
+        clean_mag_db[:, context_start_idx:context_end_idx].numpy(),
+        'Clean Spectrogram',
+        'clean_spec.png'
+    )
 
     # Masked spectrogram
     masked_mag_db = masked_spec[0, 0, :, :]
@@ -256,6 +329,12 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                           extent=[plot_start_time, plot_end_time, 0, masked_mag_db.shape[0]])
     axs[0, 1].set_title('Masked Spectrogram')
     plt.colorbar(im, ax=axs[0, 1])
+    # Save individual masked spectrogram
+    save_individual_spectrogram(
+        masked_mag_db[:, context_start_idx:context_end_idx].numpy(),
+        'Masked Spectrogram',
+        'masked_spec.png'
+    )
 
     # Model output spectrogram
     output_mag_db = pred_spec_mag[0, 0, :, :]
@@ -264,6 +343,12 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                           extent=[plot_start_time, plot_end_time, 0, pred_spec_mag.shape[2]])
     axs[0, 2].set_title('Model Output Spectrogram')
     plt.colorbar(im, ax=axs[0, 2])
+    # Save individual output spectrogram
+    save_individual_spectrogram(
+        output_mag_db[:, context_start_idx:context_end_idx].numpy(),
+        'Model Output Spectrogram',
+        'output_spec.png'
+    )
 
     # Plot error
     error_db = torch.abs(clean_mag_db - output_mag_db)
@@ -272,14 +357,19 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                           extent=[plot_start_time, plot_end_time, 0, error_db.shape[0]])
     axs[0, 3].set_title('Reconstruction Error (dB)')
     plt.colorbar(im, ax=axs[0, 3])
+    # Save individual error spectrogram
+    save_individual_spectrogram(
+        error_db[:, context_start_idx:context_end_idx].numpy(),
+        'Reconstruction Error (dB)',
+        'error_spec.png'
+    )
 
-    # Plot clean and output specs with context (replacing the zoomed versions)
+    # Plot clean and output specs with context
     im = axs[0, 4].imshow(clean_mag_db[:, context_start_idx:context_end_idx].numpy(),
                           origin='lower', aspect='auto', vmin=vmin, vmax=vmax,
                           extent=[plot_start_time, plot_end_time, 0, clean_mag_db.shape[0]])
     axs[0, 4].set_title('Clean Spec (Inpainting Region)')
     plt.colorbar(im, ax=axs[0, 4])
-    # Add vertical lines to show mask region
     axs[0, 4].axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
     axs[0, 4].axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
 
@@ -288,7 +378,6 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                           extent=[plot_start_time, plot_end_time, 0, output_mag_db.shape[0]])
     axs[0, 5].set_title('Output Spec (Inpainting Region)')
     plt.colorbar(im, ax=axs[0, 5])
-    # Add vertical lines to show mask region
     axs[0, 5].axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
     axs[0, 5].axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
 
@@ -308,9 +397,15 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                                     extent=[plot_start_time, plot_end_time, 0, pc_directions_mag.shape[-2]])
         axs[row_idx, 0].set_title(f'PC Direction {i + 1} (dB)')
         plt.colorbar(im, ax=axs[row_idx, 0])
-        # Add vertical lines to show mask region
         axs[row_idx, 0].axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
         axs[row_idx, 0].axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+
+        # Save individual PC direction spectrogram
+        save_individual_spectrogram(
+            pc_dir_db[:, context_start_idx:context_end_idx].cpu().numpy(),
+            f'PC Direction {i + 1} (dB)',
+            f'pc_direction_{i + 1}.png'
+        )
 
         for j, alpha in enumerate(alphas):
             # Add PC direction to base prediction (zoomed)
@@ -321,12 +416,19 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
                                             extent=[plot_start_time, plot_end_time, 0, modified_spec.shape[0]])
             axs[row_idx, j + 1].set_title(f'Base + PC{i + 1} (α={alpha:.1f})')
             plt.colorbar(im, ax=axs[row_idx, j + 1])
-            # Add vertical lines to show mask region
             axs[row_idx, j + 1].axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
             axs[row_idx, j + 1].axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
 
+            # Save individual PC variation spectrogram
+            save_individual_spectrogram(
+                modified_spec[:, context_start_idx:context_end_idx].cpu().numpy(),
+                f'Base + PC{i + 1} (α={alpha:.1f})',
+                f'pc{i + 1}_alpha_{alpha:.1f}.png'
+            )
+
     plt.tight_layout()
     return fig
+
 
 def process_audio_for_phonemes(audio_tensor, processor, phoneme_model, sample_rate=16000):
     """Process audio tensor for phoneme recognition"""
@@ -376,10 +478,11 @@ def get_with_full_audio(clean_audio_full, pred_subsample_audio, metadata):
 
 
 def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, masked_audio,
-                             metadata, alphas, save_dir, mean, std, sample_idx,
+                             metadata, alphas, save_dir,pitch_save_path, mean, std, sample_idx,
                              n_fft=255, hop_length=128, sample_rate=16000, analyze_phonemes=False):
     """
     Save audio variations, their pitch analyses, and transcriptions
+
     """
     # Create sample-specific directory
     sample_dir = Path(save_dir) / f"sample_{sample_idx}"
@@ -421,7 +524,8 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
         'masked': masked_audio
     }
 
-    clean_transcription_full = metadata['transcriptions'][0]
+    # Get ground truth transcription from metadata
+    ground_truth_transcription = metadata['transcriptions'][0]
     clean_audio_path_ref = metadata['clean_audio_paths'][0]
     clean_audio_full = torchaudio.load(clean_audio_path_ref)[0].squeeze(0)
     clean_path_full = sample_dir / "clean_full.wav"
@@ -430,7 +534,9 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     # Save reference audio files and get transcriptions and phonemes
     clean_path = sample_dir / "clean.wav"
     torchaudio.save(clean_path, clean_audio.unsqueeze(0), sample_rate=sample_rate)
-    transcriptions['clean'] = clean_transcription_full
+    # Use whisper for clean audio transcription
+    transcriptions['clean'] = whisper_model.transcribe(clean_path_full.as_posix(), language="en")['text']
+    transcriptions['ground_truth'] = ground_truth_transcription
     if analyze_phonemes:
         phonemes['clean'] = process_audio_for_phonemes(clean_audio_full, processor, phoneme_model)
 
@@ -484,16 +590,21 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
 
     # Save transcriptions and phonemes to a text file
     with open(sample_dir / "transcriptions_and_phonemes.txt", "w") as f:
-        for name in transcriptions.keys():
+        # First write the ground truth
+        f.write("Ground Truth Transcription:\n")
+        f.write(f"{transcriptions['ground_truth']}\n\n")
+
+        for name in ['clean', 'masked'] + [f'pc{i + 1}_alpha{alpha:.1f}' for i in range(pc_directions_mag.shape[1]) for
+                                           alpha in alphas]:
             f.write(f"{name}:\n")
             f.write(f"Transcription: {transcriptions[name]}\n")
-            if analyze_phonemes:
+            if analyze_phonemes and name in phonemes:
                 f.write(f"Phonemes: {phonemes[name]}\n")
             f.write("\n")
 
     # Generate and save pitch analysis
     n_dirs = pc_directions_mag.shape[1]
-    pitch_fig = plot_pitch_comparison(audio_variations, n_dirs, sample_rate)
+    pitch_fig = plot_pitch_comparison(audio_variations, n_dirs, sample_rate, pitch_save_path, sample_idx)
     pitch_fig.savefig(sample_dir / f"pitch_comparison.png")
     plt.close(pitch_fig)
 
@@ -541,6 +652,7 @@ class NPPCModelValidator:
             pred_spec_mag_log = self.model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
 
             # Plot results
+            spec_save_path = Path(self.config.save_dir) / "spec_variations"
             fig = plot_pc_spectrograms(
                 masked_spec_mag_log.cpu(),
                 clean_spec_mag_norm_log.cpu(),
@@ -549,11 +661,14 @@ class NPPCModelValidator:
                 mask.cpu(),
                 sample_len_seconds,
                 metadata,
+                spec_save_path,
+                sample_idx,
                 max_dirs=self.config.max_dirs_to_plot
             )
 
             # Save audio variations with pitch analysis and transcriptions
             audio_save_path = Path(self.config.save_dir) / "audio_variations"
+            pitch_save_path = Path(self.config.save_dir) / "pitch_variations"
             alphas = torch.arange(-3, 3.5, 0.5)
             save_pc_audio_variations(
                 clean_spec_mag_norm_log.cpu(),
@@ -565,6 +680,7 @@ class NPPCModelValidator:
                 metadata,
                 alphas,
                 audio_save_path,
+                pitch_save_path,
                 mean.cpu(),
                 std.cpu(),
                 sample_idx
