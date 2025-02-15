@@ -203,8 +203,10 @@ class UNet2(nn.Module):
         self.enc4 = EncoderBlock(64, 128, 3)  # Block 4: (3, 128)
         self.enc5 = EncoderBlock(128, 128, 3)  # Block 5: (3, 128)
         self.enc6 = EncoderBlock(128, 128, 3)  # Block 6: (3, 128)
-
-        # Decoder (green blocks)
+        # self.enc7 = EncoderBlock(128, 256, 3)
+        #
+        # # Decoder (green blocks)
+        # self.dec7 = DecoderBlock(256, 256, 3)
         self.dec6 = DecoderBlock(128 + 128, 128, 3)  # Block 6
         self.dec5 = DecoderBlock(128 + 128, 128, 3)  # Block 5
         self.dec4 = DecoderBlock(128 + 64, 64, 3)  # Block 4
@@ -242,18 +244,36 @@ class UNet2(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self):
+    def __init__(self, config: UNetConfig):
         super(UNet, self).__init__()
-        self.inc = inconv(1, 64)
+        self.config = config
+        self.inc = inconv(self.config.in_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
-        self.down3 = down(256, 512)
-        self.down4 = down(512, 512)
-        self.up1 = up(1024, 256)
-        self.up2 = up(512, 128)
+        self.down3 = down(256, 512 , dropout=0)
+        self.down4 = down(512, 512 , dropout=0)
+        self.up1 = up(1024, 256, dropout=0)
+        self.up2 = up(512, 128, dropout=0)
         self.up3 = up(256, 64)
         self.up4 = up(128, 64)
-        self.outc = outconv(64, 1)
+        self.outc = outconv(64, self.config.out_channels)
+
+
+        # x = 4
+        # self.inc = inconv(self.config.in_channels, x)
+        # self.down1 = down(x, 2*x)
+        # self.down2 = down(2*x, 4*x)
+        # self.down3 = down(4*x, 8*x , dropout=0)
+        # self.down4 = down(8*x, 8*x , dropout=0)
+        # self.up1 = up(16*x, 4*x, dropout=0)
+        # self.up2 = up(8*x, 2*x, dropout=0)
+        # self.up3 = up(4*x, x)
+        # self.up4 = up(2*x, x)
+        # self.outc = outconv(x, self.config.out_channels)
+
+
+
+
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -270,10 +290,9 @@ class UNet(nn.Module):
 
 
 class RestorationWrapper(nn.Module):
-    def __init__(self, config: UNetConfig):
+    def __init__(self, base_net: UNet):
         super().__init__()
-        self.config = config
-        self.net = UNet()
+        self.net = base_net
 
     def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
         # input dims of the mask are [B,1,F,T]
@@ -281,8 +300,13 @@ class RestorationWrapper(nn.Module):
         x = self.net(x_in)
         # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
         mask_broadcasted = mask
-        if x_in.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
-            mask_broadcasted = mask_broadcasted.expand(-1, x_in.shape[1], -1,-1)  # Broadcast along the channel dimension
+        if x.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
+            mask_broadcasted = mask_broadcasted.expand(-1, x.shape[1], -1,-1)  # Broadcast along the channel dimension
         # Apply inpainting
-        x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
+        if x_in.shape[1] > 1:
+            masked_spec = x_in[:,0,:,:]
+            masked_spec = masked_spec.unsqueeze(1).expand(-1,mask_broadcasted.shape[1],-1,-1)
+            x = masked_spec * mask_broadcasted + x * (1 - mask_broadcasted)
+        else:
+            x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
         return x

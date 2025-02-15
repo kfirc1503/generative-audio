@@ -100,7 +100,7 @@ def main(cfg: DictConfig) -> None:
     print(f"Dataset size: {len(dataset)}")
 
     # Get spectrograms from dataset
-    stft_masked, mask_frames, stft_clean = dataset[0]
+    stft_masked, mask_frames, stft_clean, masked_audio = dataset[0]
 
     masked_audio, mask, clean_audio = dataset.get_audio_and_time_mask(0)
     # Print shapes

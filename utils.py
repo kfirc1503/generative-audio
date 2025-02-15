@@ -1,7 +1,7 @@
 # Import necessary libraries for audio processing
 import torchaudio
 import torch
-from typing import Union, Tuple
+from typing import Union, Tuple, List, Any
 from pathlib import Path
 
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
@@ -19,15 +19,18 @@ class AudioConfig(pydantic.BaseModel):
     sr: int = 16000
     stft_configuration: StftConfig
 
+
 class OptimizerConfig(pydantic.BaseModel):
     type: str
     args: dict
+
 
 class DataLoaderConfig(pydantic.BaseModel):
     batch_size: int = 8
     num_workers: int = 4
     pin_memory: bool = True
     shuffle: bool = False
+
 
 def model_outputs_to_waveforms(enhanced_masks, noisy_reals, noisy_imags, orig_length):
     """
@@ -169,6 +172,7 @@ def audio_to_stft(waveform: torch.Tensor, stft_configuration: StftConfig, device
     stft_real_imag = torch.stack([real_part, imag_part], dim=1)  # shape [B, 2, F, T]
     return stft_real_imag
 
+
 def prepare_input(audio_path: str | Path):
     """
     Prepare audio input for FullSubNet_Plus model according to the official implementation
@@ -283,3 +287,42 @@ def preprocess_log_magnitude(magnitude, eps=1e-6):
     # normalized_log_mag = log_mag
     normalized_log_mag = (log_mag - mean) / std
     return normalized_log_mag, mean, std
+
+
+def preprocess_data(clean_spec, masked_spec, mask, plot_mean_std=False):
+    mask = mask.unsqueeze(1).unsqueeze(2)
+    mask = mask.expand(-1, 1, clean_spec.shape[2], -1)
+    clean_spec_mag = torch.sqrt(clean_spec[:, 0, :, :] ** 2 + clean_spec[:, 1, :, :] ** 2)
+    clean_spec_mag = clean_spec_mag.unsqueeze(1)
+    masked_spec_mag = torch.sqrt(masked_spec[:, 0, :, :] ** 2 + masked_spec[:, 1, :, :] ** 2)
+    masked_spec_mag = masked_spec_mag.unsqueeze(1)
+    clean_spec_mag_norm_log, mean, std = preprocess_log_magnitude(clean_spec_mag)
+    masked_spec_mag_log = torch.log(masked_spec_mag + 1e-6)
+    masked_spec_mag_norm_log = (masked_spec_mag_log - mean) / std
+    if plot_mean_std:
+        return clean_spec_mag_norm_log, mask, masked_spec_mag_norm_log, mean, std
+    return clean_spec_mag_norm_log, mask, masked_spec_mag_norm_log
+
+
+def collate_fn(batch: List[Any]):
+    """Custom collate function to handle AudioInpaintingSample batching."""
+
+    # Stack tensors for training
+    stft_masked = torch.stack([b.stft_masked for b in batch])
+    mask_frames = torch.stack([b.mask_frames for b in batch])
+    stft_clean = torch.stack([b.stft_clean for b in batch])
+    masked_audio = torch.stack([b.masked_audio for b in batch])
+
+    # Collect metadata in a dictionary
+    metadata = {
+        "clean_audio_paths": [str(b.clean_audio_path) for b in batch],
+        "subsample_start_idx": [b.subsample_start_idx for b in batch],
+        "mask_start_idx": [b.mask_start_idx for b in batch],
+        "mask_end_idx": [b.mask_end_idx for b in batch],
+        "mask_start_frame_idx": [b.mask_start_frame_idx for b in batch],
+        "mask_end_frame_idx": [b.mask_end_frame_idx for b in batch],
+        "transcriptions": [b.transcription for b in batch],
+        "sample_rates": [b.sample_rate for b in batch],
+    }
+
+    return stft_masked, mask_frames ,stft_clean, masked_audio, metadata

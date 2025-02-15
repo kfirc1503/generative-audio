@@ -1,62 +1,73 @@
-# Configuration for audio inpainting training
-#n_steps: 2000
-n_epochs: 30
-checkpoint_dir: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint"
+# Training parameters
+n_epochs: 10  # Set to null if using n_steps
+#n_steps: null  # Set to null if using n_epochs
+checkpoint_dir: "../../../../../../data/checkpoints/restoration_model"
+
+# Main training configuration
 inpainting_training_configuration:
+  # Wandb configuration
+  use_wandb: true
+  wandb_project_name: "generative-audio"
+  wandb_run_name: "restoration-inpainting-model-128ms-gap-size"  # Will be auto-generated if not specified
+  wandb_artifact_name: "restoration_model"
+  wandb_tags:
+    - "128ms_gap"            # Gap length
+    - "use_vad"              # voice activity is used
+    - "2.044sec_audio_len"
+    - "libriSpeech_dataset"
+  # Model configuration
   device: "cuda"
+
+
   model_configuration:
     in_channels: 1
     out_channels: 1
-#    base_channels: 64
-#    base_filters: 64
-#    channels_list: [32, 64, 128, 256]
-#    bottleneck_channels: 512
-#    min_channels_decoder: 64
-#    n_groups: 8
+    # Add other UNet specific configurations here
 
-
+  # Data configuration
   data_configuration:
-    clean_path: "../../../../FullSubNet_plus/data/clean/train"
+    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
     sample_rate: 16000
-    missing_length_seconds: 0.064
-    missing_start_seconds: 0.5
-    # Adjust the sub_sample_length_seconds to get exactly T=512:
-#    sub_sample_length_seconds: 8.176
-#    sub_sample_length_seconds: 4.088
-    sub_sample_length_seconds: 1.022
+    missing_length_seconds: 0.128
+    missing_start_seconds: 0.4
+#    sub_sample_length_seconds: 1.022
+    sub_sample_length_seconds: 2.044
 
     target_dB_FS: -25.0
+    target_dB_FS_floating_value: 0
+    use_vad: true
     stft_configuration:
-      # nfft chosen to yield F=256
-#      nfft: 510
-#      win_length: 510
-#      hop_length: 256
       nfft: 255
       win_length: 255
       hop_length: 128
 
+  # Dataloader configuration
   dataloader_configuration:
-    batch_size: 32
+    batch_size: 128
     shuffle: true
     num_workers: 8
-    pin_memory: false
+    pin_memory: true
 
+  # Optimizer configuration
   optimizer_configuration:
     type: "Adam"
     args:
-      lr: 2.0e-4
-      betas: [0.9, 0.999]
-#
-#  stft_configuration:
-#    nfft: 512
-#    win_length: 512
-#    hop_length: 256
+      lr: 1.0e-4
+      betas: [0.5, 0.999]
 
-#  training_configuration:
-#    device: "cuda"  # will automatically select cuda if available
-#    learning_rate: 1.0e-4
-#    n_steps: 100000
-#    n_epochs: null  # using n_steps instead
-#    save_interval: 10000
-#    log_interval: 100
-#    checkpoint_dir: "checkpoints"
+## Validation configuration (optional)
+#validation_data_configuration:
+#  clean_path: "../../../../../../data/clean/test"
+#  sample_rate: 16000
+#  missing_length_seconds: 0.256
+#  missing_start_seconds: 0.4
+#  sub_sample_length_seconds: 1.533
+##  sub_sample_length_seconds: 2.044
+#
+#  target_dB_FS: -25.0
+#  target_dB_FS_floating_value: 0
+#  use_vad: true
+#  stft_configuration:
+#    nfft: 255
+#    win_length: 255
+#    hop_length: 128

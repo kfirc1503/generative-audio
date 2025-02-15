@@ -1,6 +1,6 @@
 import pydantic
 from nppc_audio.inpainting.trainer.restoration_trainer import InpaintingTrainerConfig
-
+from dataset.audio_dataset_inpainting import AudioInpaintingConfig
 
 
 class Config(pydantic.BaseModel):
@@ -8,6 +8,7 @@ class Config(pydantic.BaseModel):
     checkpoint_dir: str
     n_steps: int = None
     n_epochs: int = None
+    validation_data_configuration: AudioInpaintingConfig = None
 
 
 

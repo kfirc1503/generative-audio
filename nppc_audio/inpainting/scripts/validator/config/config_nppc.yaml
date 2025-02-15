@@ -1,0 +1,55 @@
+# Number of samples to validate
+num_samples_to_validate: 5
+
+# Model validator configuration
+model_validator_configuration:
+  #this is maybe working
+#  checkpoint_path: "../../../../FullSubNet_plus/data/inpainting/nppc_model/checkpoint/checkpoint_final_20250108_224158.pt"
+  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250131_001448.pt"
+
+  device: "cuda"
+  save_dir: "validation_nppc_results"
+  max_dirs_to_plot: 5  # Set to null to plot all directions
+  model_configuration:
+    pretrained_restoration_model_configuration:
+      in_channels: 1
+      out_channels: 1
+
+#    # Wandb configuration for loading the pretrained model
+    wandb_config:
+      entity: "kfirc-tel-aviv-university"
+      project: "generative-audio"
+      artifact_name: "restoration_model"
+      artifact_version: "latest"
+      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
+
+#    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250130_221935.pt"
+    audio_pc_wrapper_configuration:
+      n_dirs: 5
+      model_configuration:
+        in_channels: 2
+        out_channels: 5
+
+# Data configuration
+data_configuration:
+  clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/test-clean"
+  sample_rate: 16000
+  missing_length_seconds: 0.128
+  missing_start_seconds: 0.4
+  sub_sample_length_seconds: 2.044
+  target_dB_FS: -25.0
+  stft_configuration:
+    nfft: 255
+    win_length: 255
+    hop_length: 128
+  use_vad: True
+  is_random_sub_sample: False
+#  seed: 0
+  seed: 1
+
+# Dataloader configuration
+dataloader_configuration:
+  num_workers: 1
+  pin_memory: true
+  shuffle: false
+  batch_size: 1

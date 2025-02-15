@@ -2,23 +2,25 @@
 
 model_validator_configuration:
   model_configuration:
-    in_channels: 2
-    out_channels: 2
+    in_channels: 1
+    out_channels: 1
 #    channels_list: [64, 128, 256, 512]
 #    bottleneck_channels: 512
 #    min_channels_decoder: 64
 #    n_groups: 8
-  checkpoint_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20241228_174230.pt"
+  checkpoint_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250120_185759.pt"
+#  checkpoint_path: "../../../../FullSubNet_plus/data/inpainting/restoration_model/checkpoint/checkpoint_final_20250111_010610.pt"
+
   device: "cuda"
   save_dir: "validation_results"
 
 
 
 data_configuration:
-  clean_path: "../../../../FullSubNet_plus/data/clean/test"
+  clean_path: "../../../../../../data/clean/train"
   sample_rate: 16000
-  missing_length_seconds: 0.064
-  missing_start_seconds: 0.5
+  missing_length_seconds: 0.256
+  missing_start_seconds: 0.4
   # Adjust the sub_sample_length_seconds to get exactly T=512:
   sub_sample_length_seconds: 1.022
   target_dB_FS: -25.0
@@ -27,9 +29,10 @@ data_configuration:
     nfft: 255
     win_length: 255
     hop_length: 128
+  use_vad: True
 
 dataloader_configuration:
   batch_size: 1
-  shuffle: false
+  shuffle: true
   num_workers: 4
   pin_memory: true
