@@ -125,6 +125,7 @@ class UNetConfig(pydantic.BaseModel):
     """
     in_channels: int = 1
     out_channels: int = 1
+    dropout: float = 0.0
 
 
 ##############################################################################
@@ -250,10 +251,10 @@ class UNet(nn.Module):
         self.inc = inconv(self.config.in_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
-        self.down3 = down(256, 512 , dropout=0)
-        self.down4 = down(512, 512 , dropout=0)
-        self.up1 = up(1024, 256, dropout=0)
-        self.up2 = up(512, 128, dropout=0)
+        self.down3 = down(256, 512 , dropout=self.config.dropout)
+        self.down4 = down(512, 512 , dropout=self.config.dropout)
+        self.up1 = up(1024, 256, dropout=self.config.dropout)
+        self.up2 = up(512, 128, dropout=self.config.dropout)
         self.up3 = up(256, 64)
         self.up4 = up(128, 64)
         self.outc = outconv(64, self.config.out_channels)

@@ -200,6 +200,12 @@ class AudioInpaintingDataset(Dataset):
         if not valid_segments:
             return self._create_random_mask(audio_length)
 
+        margin_in_samples = 2000
+        valid_segments = [
+            seg for seg in valid_segments
+            if (seg['end'] - seg['start']) >= self.config.missing_length + margin_in_samples
+        ]
+
         # Randomly choose one of the valid speech segments
         segment = random.choice(valid_segments)
         segment_start = segment['start']
@@ -209,9 +215,9 @@ class AudioInpaintingDataset(Dataset):
         segment_length = segment_end - segment_start
         if segment_length <= self.config.missing_length:
             return self._create_random_mask(audio_length)  # Segment too short, fall back to random
-
+        small_margin = 350
         max_start = segment_length - self.config.missing_length
-        relative_start = random.randint(0, max_start)
+        relative_start = random.randint(small_margin, max_start - small_margin)
         mask_start = segment_start + relative_start
         mask_end = mask_start + self.config.missing_length
 
@@ -219,6 +225,55 @@ class AudioInpaintingDataset(Dataset):
         mask = torch.ones(1, audio_length)
         mask[:, mask_start:mask_end] = 0
         return mask, mask_start, mask_end
+
+    # def time_to_spec_mask(self, mask_time, T_frames, waveform_length, center=True):
+    #     """Convert time-domain mask to spectrogram mask ensuring consistent size"""
+    #     win_length = self.config.stft_configuration.win_length
+    #     hop_length = self.config.stft_configuration.hop_length
+    #
+    #     assert mask_time.dim() == 2 and mask_time.shape[0] == 1, "mask_time should be [1, T] shape."
+    #
+    #     mask_frames = []
+    #     half_window = win_length // 2
+    #
+    #     # Pre-calculate valid frame range
+    #     if center:
+    #         valid_start = -half_window
+    #         valid_end = waveform_length + half_window
+    #     else:
+    #         valid_start = 0
+    #         valid_end = waveform_length
+    #
+    #     for t_frame in range(T_frames):
+    #         frame_start = t_frame * hop_length
+    #         if center:
+    #             frame_start -= half_window
+    #         frame_end = frame_start + win_length
+    #
+    #         # Ensure frame boundaries are valid
+    #         frame_start = max(valid_start, frame_start)
+    #         frame_end = min(valid_end, frame_end)
+    #
+    #         if frame_end <= frame_start:
+    #             frame_mask_value = 0.0
+    #         else:
+    #             # Map frame boundaries to valid indices in mask_time
+    #             valid_start_idx = max(0, frame_start)
+    #             valid_end_idx = min(waveform_length, frame_end)
+    #             frame_values = mask_time[0, valid_start_idx:valid_end_idx]
+    #             frame_mask_value = float((frame_values.min() == 1))
+    #
+    #         mask_frames.append(frame_mask_value)
+    #
+    #     spec_mask = torch.tensor(mask_frames)
+    #
+    #     # Verify spec mask consistency
+    #     num_zeros = (spec_mask == 0).sum()
+    #     expected_zeros = int(self.config.missing_length_seconds * self.config.sample_rate / hop_length)
+    #     assert abs(
+    #         num_zeros - expected_zeros) <= 1, f"Inconsistent spec mask size: got {num_zeros}, expected {expected_zeros}"
+    #     return spec_mask
+
 
     def time_to_spec_mask(self, mask_time, T_frames, waveform_length, center=True):
         """Convert time-domain mask to spectrogram mask"""

@@ -3,7 +3,8 @@ import torchaudio
 import torch
 from typing import Union, Tuple, List, Any
 from pathlib import Path
-
+import torch.nn as nn
+from sklearn.decomposition import PCA
 from FullSubNet_plus.speech_enhance.fullsubnet_plus.model.fullsubnet_plus import FullSubNet_Plus, FullSubNetPlusConfig
 import pydantic
 from FullSubNet_plus.speech_enhance.audio_zen.acoustics.mask import decompress_cIRM
@@ -326,3 +327,154 @@ def collate_fn(batch: List[Any]):
     }
 
     return stft_masked, mask_frames ,stft_clean, masked_audio, metadata
+
+
+
+def enable_dropout(model):
+    """ Enable Dropout layers during inference for MC-Dropout """
+    for module in model.modules():
+        if isinstance(module, nn.Dropout):
+            module.train()  # Keep Dropout active at inference time
+
+
+def mc_dropout_inference(model, input_tensor, K=50):
+    """
+    Perform Monte Carlo Dropout inference to generate K outputs.
+
+    model: The neural network (U-Net, Transformer, etc.)
+    input_tensor: Input speech spectrogram (batch_size, input_dim)
+    K: Number of stochastic forward passes
+    """
+    enable_dropout(model)  # Activate dropout during inference
+
+    outputs = torch.stack([model(input_tensor) for _ in range(K)], dim=0)  # Shape: (K, B, D)
+    return outputs
+
+
+def compute_pca_and_importance_weights(outputs):
+    """
+    Apply PCA (via SVD) on multiple MC-Dropout outputs and compute importance weights.
+
+    outputs: Tensor of shape (K, B, D) - Multiple inpainted spectrograms
+    Returns:
+        - principal_components: Top principal components
+        - importance_weights: Contribution of each component
+        - mean_prediction: Mean of the outputs
+    """
+    K, B, D = outputs.shape  # (num_samples, batch_size, feature_dim)
+
+    # Compute mean prediction (E[x|y])
+    mean_prediction = outputs.mean(dim=0)  # (B, D)
+
+    # Compute residuals (centered data)
+    centered_outputs = outputs - mean_prediction.unsqueeze(0)  # (K, B, D)
+
+    # Flatten over batch dimension
+    centered_outputs_flat = centered_outputs.view(K, -1).cpu().numpy()  # Shape: (K, B*D)
+
+    # Perform PCA using SVD
+    pca = PCA(n_components=min(K, 5))  # Extract top 5 PCs (or K if smaller)
+    pca.fit(centered_outputs_flat)
+
+    # Extract principal components
+    principal_components = pca.components_  # Shape: (num_PCs, B*D)
+
+    # Compute importance weights (normalized eigenvalues)
+    eigenvalues = pca.explained_variance_
+    importance_weights = eigenvalues / eigenvalues.sum()  # Normalize to sum to 1
+
+    return principal_components, importance_weights, mean_prediction
+
+
+
+def calculate_unet_baseline(model, masked_spec, mask, n_mc_samples=50, n_components=5):
+    """
+    Calculate U-Net baseline with MC Dropout and PCA analysis
+
+    Args:
+        model: The U-Net model
+        masked_spec: Masked spectrogram input [B, 1, F, T]
+        mask: Binary mask [B, 1, F, T] (1 for known regions, 0 for inpainting area)
+        n_mc_samples: Number of MC dropout samples
+        n_components: Number of principal components to extract
+    Returns:
+        dict containing:
+        - mean_prediction: [1, 1, F, T]
+        - principal_components: [1, n_components, F, T]  # Exactly this shape
+        - importance_weights: [n_components]
+    """
+    # Enable dropout
+    enable_dropout(model)
+
+    # Collect MC samples
+    mc_predictions = []
+    B = masked_spec.shape[0]  # Batch size
+
+    for _ in range(n_mc_samples):
+        with torch.no_grad():
+            pred = model(masked_spec, mask)  # Shape: [B, 1, F, T]
+
+            # Extract inpainting area using each sample's own mask
+            pred_flat = pred.reshape(B, 1, -1)  # [B, 1, F*T]
+            mask_flat = mask.reshape(B, 1, -1)  # [B, 1, F*T]
+            pred_inpaint = pred_flat[mask_flat == 0].reshape(B, -1)  # [B, N_masked]
+            mc_predictions.append(pred_inpaint)
+
+    # Stack predictions: [n_mc, N_masked_elements]
+    mc_predictions = torch.stack(mc_predictions)
+
+    # Reshape for PCA: [n_mc, B, N_masked_per_batch]
+    N_masked_per_batch = (~mask[0,0].bool()).sum()   # Number of masked elements per batch item
+    predictions_flat = mc_predictions.reshape(n_mc_samples, B, N_masked_per_batch)
+
+    # Apply PCA analysis
+    principal_components, importance_weights, mean_prediction = compute_pca_and_importance_weights(predictions_flat)
+    # turn to torch, move back to the device:
+    device = masked_spec.device
+    principal_components = torch.from_numpy(principal_components).to(device)
+    importance_weights = torch.from_numpy(importance_weights).to(device)
+    mean_prediction = mean_prediction.to(device)
+
+    # Reconstruct full spectrograms with zeros in known regions
+    _, F, T = masked_spec.shape[1:]
+
+    # Helper function to reconstruct full spectrogram
+    def reconstruct_full_spec(inpaint_values):
+        full_spec = torch.zeros((F, T), device=masked_spec.device)
+        full_spec.reshape(-1)[mask[0, 0].reshape(-1) == 0] = inpaint_values
+        return full_spec
+
+    # Reshape principal components back to full spectrograms
+    principal_components = principal_components.reshape(n_components, B, N_masked_per_batch)
+
+    # Helper function to reconstruct full spectrogram (vectorized for batch)
+    def reconstruct_full_spec_batch(inpaint_values):
+        """
+        Args:
+            inpaint_values: [B, N_masked] tensor
+        Returns:
+            [B, F, T] tensor
+        """
+        full_spec = torch.zeros((B, F, T), device=masked_spec.device)
+        full_spec.reshape(B, -1)[:, mask[0,0].reshape(-1) == 0] = inpaint_values
+        return full_spec
+
+    # Reconstruct PCs for all batches at once
+    full_pcs = reconstruct_full_spec_batch(principal_components.transpose(0, 1).reshape(B, n_components * N_masked_per_batch))
+    full_pcs = full_pcs.reshape(B, n_components, F, T)
+    full_pcs = full_pcs.unsqueeze(1)  # [B, 1, n_components, F, T]
+
+    # Reshape mean prediction to full spectrogram [B, 1, F, T]
+    mean_prediction = mean_prediction.reshape(B, N_masked_per_batch)
+    full_mean = reconstruct_full_spec_batch(mean_prediction).unsqueeze(1)  # [B, 1, F, T]
+
+    # Add shape assertions to verify
+    assert full_pcs.shape == (
+        B, 1, n_components, F, T), f"PC shape is {full_pcs.shape}, expected ({B}, 1, {n_components}, {F}, {T})"
+    assert full_mean.shape == (B, 1, F, T), f"Mean shape is {full_mean.shape}, expected ({B}, 1, {F}, {T})"
+
+    return {
+        'mean_prediction': full_mean,
+        'principal_components': full_pcs,
+        'importance_weights': importance_weights
+    }

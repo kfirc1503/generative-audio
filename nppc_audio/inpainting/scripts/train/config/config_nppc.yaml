@@ -1,4 +1,4 @@
-n_epochs: 5
+n_epochs: 6
 checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
 inpainting_nppc_training_configuration:
   device: "cuda"
@@ -16,6 +16,7 @@ inpainting_nppc_training_configuration:
     pretrained_restoration_model_configuration:
       in_channels: 1
       out_channels: 1
+      dropout: 0.2
 
     # Wandb configuration for loading the pretrained model
     wandb_config:
@@ -23,7 +24,7 @@ inpainting_nppc_training_configuration:
       project: "generative-audio"
       artifact_name: "restoration_model"
       artifact_version: "latest"
-      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
+      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
 
     audio_pc_wrapper_configuration:
       n_dirs: 5
