@@ -1,4 +1,4 @@
-n_epochs: 6
+n_epochs: 5
 checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
 inpainting_nppc_training_configuration:
   device: "cuda"
@@ -36,7 +36,7 @@ inpainting_nppc_training_configuration:
   data_configuration:
     clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
     sample_rate: 16000
-    missing_length_seconds: 0.128
+    missing_spec_frames: 18
     missing_start_seconds: 0.4
     sub_sample_length_seconds: 2.044
     target_dB_FS: -25.0

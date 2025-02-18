@@ -240,6 +240,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         plt.show()
         return fig
 
+
     def base_step(self, batch):
         """
         Modified NPPC base step: Projects W_MC onto W_NPPC while preserving the original normalization structure.
@@ -265,8 +266,12 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         restoration_model = self.nppc_model.pretrained_restoration_model
         restoration_model.train()
         mc_dropout_after_pca_dict = calculate_unet_baseline(restoration_model, masked_spec_mag_log, mask)
-        W_mc = mc_dropout_after_pca_dict['principal_components']
+        W_mc = mc_dropout_after_pca_dict['scaled_principal_components']
+        # Ensure PCA components are scaled correctly
+        # explained_variance = mc_dropout_after_pca_dict['importance_weights']
+        # W_mc = W_mc * explained_variance[:, :, None, None] # Scale by sqrt of variance
         restoration_model.eval()
+        singular_values = mc_dropout_after_pca_dict['singular_vals']
 
         # outputs_mc = mc_dropout_inference(self.nppc_model, masked_spec_mag_log, K=50)  # [K, B, F, T]
         # outputs_mc_flat = outputs_mc.flatten(2)  # [K, B, F*T]
@@ -275,21 +280,44 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         # W_mc = compute_pca_on_mc_dropout(outputs_mc_flat)  # [B, F*T, K]
 
         # Compute Norms for W_MC
-        w_mc_norms = W_mc.norm(dim=2) + 1e-6
+        w_mc_ = W_mc.flatten(2)
+        w_mc_norms = w_mc_.norm(dim=2) + 1e-6
+        W_mc_hat = w_mc_ / w_mc_norms[:, :, None]
 
         # Normalize W_MC
-        W_mc_hat = W_mc / w_mc_norms[:, None]
+        # W_mc_hat = W_mc / w_mc_norms[:, None]
 
         # Step 3️⃣: Scale W_NPPC's norms to match W_MC
-        w_norms = w_norms / w_mc_norms  # Scale norms only, like in original code
+        # w_norms = w_norms / w_mc_norms  # Scale norms only, like in original code
 
         # Step 4️⃣: Compute Updated Loss Terms
         ## Projection of W_MC onto W_NPPC
-        proj_W_mc_on_W_nppc = torch.einsum('bki,bkj->bk', w_hat_mat, W_mc_hat)  # Projection coefficients
-        reconst_err = 1 - proj_W_mc_on_W_nppc.pow(2).sum(dim=1)  # Reconstruction error from projection
+        proj_coeffs = []
+        reconst_err_list = []
+        second_moment_list = []
+        for i in range(w_hat_mat.shape[1]):  # for each direction
+            w_i = w_hat_mat[:, i, :]  # [B, F*T] - i-th row of NPPC
+            w_mc_i = W_mc_hat[:, i, :]  # [B, F*T] - i-th row of MC
 
-        ## Second Moment MSE (Align Variances)
-        second_moment_mse = (w_norms.pow(2) - proj_W_mc_on_W_nppc.detach().pow(2)).pow(2)
+            # Calculate projection coefficient
+            proj_coeff = torch.sum(w_i * w_mc_i, dim=1)  # [B]
+            proj_coeffs.append(proj_coeff)
+            curr_reconst_err = 1 - proj_coeff.pow(2)
+            curr_second_moment = (w_norms[:,i].pow(2) - singular_values[:,i].pow(2)).pow(2)
+            # curr_second_moment = (w_norms[:,i].pow(2) - proj_coeff.detach().pow(2)).pow(2)
+
+            reconst_err_list.append(curr_reconst_err)
+            second_moment_list.append(curr_second_moment)
+
+        # Stack all projections
+        reconst_err = torch.stack(reconst_err_list, dim=1).mean(dim=1)
+        second_moment_mse = torch.stack(second_moment_list, dim=1).mean(dim=1)
+        proj_W_mc_on_W_nppc = torch.stack(proj_coeffs, dim=1)  # [B, 5]
+        # # proj_W_mc_on_W_nppc = torch.einsum('bki,bkj->bk', w_hat_mat, W_mc_hat)  # Projection coefficients
+        # reconst_err = 1 - proj_W_mc_on_W_nppc.pow(2).mean(dim=1)  # Reconstruction error from projection
+        #
+        # ## Second Moment MSE (Align Variances)
+        # second_moment_mse = (w_norms.pow(2) - proj_W_mc_on_W_nppc.detach().pow(2)).pow(2)
 
         ## Final Loss
         objective = self._calculate_final_objective(reconst_err, second_moment_mse)
