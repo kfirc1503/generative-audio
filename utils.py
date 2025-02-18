@@ -449,10 +449,17 @@ def compute_pca_sklearn_batch(outputs, n_components=5):
 
         # --- SCALED PCS: multiply each PC by its singular value ---
         scaled_pcs_np = pcs_np * singular_vals[:, None]  # shape (n_components, D)
+        # scaled_pcs_np += mean_vec_np
+        # Xhat = np.dot(pca.transform(item_np)[:, :n_components], pca.components_[:n_components, :])
+        # Xhat = Xhat[:n_components, :]
+        # Xhat += mean_vec_np
+
 
         # Convert back to torch
         pcs_torch = torch.from_numpy(pcs_np).float()
         scaled_pcs_torch = torch.from_numpy(scaled_pcs_np).float()
+        # scaled_pcs_torch = torch.from_numpy(Xhat).float()
+
         importance_torch = torch.from_numpy(importance).float()
         mean_vec_torch = torch.from_numpy(mean_vec_np).float()
         singular_vals_torch = torch.from_numpy(singular_vals).float()

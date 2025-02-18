@@ -1,4 +1,4 @@
-n_epochs: 5
+n_epochs: 6
 checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
 inpainting_nppc_training_configuration:
   device: "cuda"

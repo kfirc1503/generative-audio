@@ -241,7 +241,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         return fig
 
 
-    def base_step(self, batch):
+    def base_step2(self, batch):
         """
         Modified NPPC base step: Projects W_MC onto W_NPPC while preserving the original normalization structure.
         """
@@ -335,7 +335,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         return reconst_err, objective, log
 
-    def base_step2(self, batch):
+    def base_step(self, batch):
         """
         base step function for training the nppc for the inpainting audio task
         Args:
