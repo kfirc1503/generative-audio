@@ -54,22 +54,22 @@ def main(cfg: DictConfig):
         if i >= num_samples:
             break
 
-        # if i == 3 or i == 7 or i == 47:
-        print(f"Processing sample {i + 1}/{num_samples}")
+        if i == 3 or i == 7 or i == 47:
+            print(f"Processing sample {i + 1}/{num_samples}")
 
-        results = validator.validate_sample(
-            masked_spec,
-            mask,
-            clean_spec,
-            masked_audio,
-            metadata,
-            config.data_configuration.sub_sample_length_seconds,
-            i
-        )
+            results = validator.validate_sample(
+                masked_spec,
+                mask,
+                clean_spec,
+                masked_audio,
+                metadata,
+                config.data_configuration.sub_sample_length_seconds,
+                i
+            )
 
-        # Save plot
-        results['figure'].savefig(save_dir / f"pc_directions_sample_{i}.png")
-        plt.close(results['figure'])
+            # Save plot
+            results['figure'].savefig(save_dir / f"pc_directions_sample_{i}.png")
+            plt.close(results['figure'])
 
     print(f"\nResults saved in: {save_dir}")
 

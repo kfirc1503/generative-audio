@@ -94,7 +94,7 @@ def plot_grouped_bars(df, save_path="figures/metrics_comparison.png"):
 
     # Adjust layout
     plt.tight_layout()
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=30, fontweight='bold')
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=25, fontweight='bold')
 
     # Save the figure
     plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')

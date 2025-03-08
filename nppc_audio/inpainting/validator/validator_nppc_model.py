@@ -99,13 +99,16 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
 
         # Save individual PC plot if save_dir is provided
         if save_dir is not None:
-            fig_pc = plt.figure(figsize=(15, 4))
+            fig_pc = plt.figure(figsize=(15, 4))  # Changed from (15, 4)
             ax_pc = fig_pc.add_subplot(111)
 
             # Plot clean reference
             ax_pc.plot(times, f0_clean, color='black', label='Clean', linewidth=2)
 
             # Plot all alpha variations for this PC
+            legend_alphas = unique_alphas[::2]
+            # legend_alphas = unique_alphas
+            # First plot all lines without labels
             for alpha_idx, alpha in enumerate(unique_alphas):
                 variation_key = f'pc{pc_num}_alpha{alpha:.1f}'
                 if variation_key in audio_variations:
@@ -120,16 +123,30 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
                         fmax=400,
                         sr=sample_rate
                     )
+
+                    # Use _nolegend_ for alphas we don't want in legend
+                    if alpha in legend_alphas:
+                        label = f'α={alpha:.1f}'
+                    else:
+                        label = '_nolegend_'
+
                     ax_pc.plot(times, f0, color=colors[alpha_idx],
-                               label=f'α={alpha:.1f}', alpha=0.7)
+                               label=label, alpha=0.7)
 
-            ax_pc.set_title(f'PC Direction {pc_num} Pitch Contours')
-            ax_pc.set_ylabel('Frequency (Hz)')
-            ax_pc.set_xlabel('Time (s)')
+            # Set empty title and larger fonts
+            ax_pc.set_title('')
+            ax_pc.set_ylabel('Frequency (Hz)', fontsize=20)
+            ax_pc.set_xlabel('Time (s)', fontsize=20)
+            ax_pc.tick_params(axis='both', labelsize=18)
             ax_pc.grid(True)
-            ax_pc.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
 
-            fig_pc.tight_layout()
+            # # Add legend on the right side
+            ax_pc.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+
+            # Adjust the plot to fill the figure properly
+            plt.subplots_adjust(right=0.85, top=0.98, bottom=0.15, left=0.1)
+
+            # Save figure
             fig_pc.savefig(sample_dir / f'pc_{pc_num}_pitch.png', bbox_inches='tight')
             plt.close(fig_pc)
 
@@ -924,11 +941,11 @@ class NPPCModelValidator:
             # Get PC directions from model
             pc_directions = self.model(masked_spec_mag_log, mask)
             # Calculate mc dropout + pca
-            # restoration_model = self.model.pretrained_restoration_model
-            # mc_dropout_after_pca = calculate_unet_baseline(restoration_model, masked_spec_mag_log, mask)
-            # mc_pc_directions = mc_dropout_after_pca['scaled_principal_components']
-            # self.model.eval()  # just in case
-            # self.model.to(self.device)
+            restoration_model = self.model.pretrained_restoration_model
+            mc_dropout_after_pca = calculate_unet_baseline(restoration_model, masked_spec_mag_log, mask)
+            mc_pc_directions = mc_dropout_after_pca['scaled_principal_components']
+            self.model.eval()  # just in case
+            self.model.to(self.device)
             pred_spec_mag_log = self.model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
             self._validate_with_baseline(masked_spec_mag_log,mask,clean_spec_mag_norm_log,pred_spec_mag_log,sample_idx)
             self.model.eval()  # just in case

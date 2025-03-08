@@ -1,11 +1,11 @@
 # Number of samples to validate
-num_samples_to_validate: 5
+num_samples_to_validate: 50
 
 # Model validator configuration
 model_validator_configuration:
   #this is maybe working
   checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250131_001448.pt"
-#  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250215_223948.pt"
+#  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250218_230241.pt"
 
 
   device: "cuda"
@@ -22,10 +22,14 @@ model_validator_configuration:
       entity: "kfirc-tel-aviv-university"
       project: "generative-audio"
       artifact_name: "restoration_model"
+#      artifact_version: "v3"
       artifact_version: "latest"
-      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
 
-#    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250130_221935.pt"
+      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
+#      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
+
+
+    #    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250130_221935.pt"
     audio_pc_wrapper_configuration:
       n_dirs: 5
       model_configuration:
@@ -36,8 +40,8 @@ model_validator_configuration:
 data_configuration:
   clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/test-clean"
   sample_rate: 16000
-#  missing_length_seconds: 0.128
-  missing_spec_frames: 18
+  missing_length_seconds: 0.128
+#  missing_spec_frames: 18
   missing_start_seconds: 0.4
   sub_sample_length_seconds: 2.044
   target_dB_FS: -25.0
