@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 import pydantic
 from pathlib import Path
 from nppc_audio.inpainting.nppc.nppc_model import NPPCModel, NPPCModelConfig
-from utils import preprocess_log_magnitude
+from utils import preprocess_log_magnitude, enable_dropout, compute_pca_and_importance_weights, calculate_unet_baseline
+import json
 import utils
 import numpy as np
 import torchaudio
@@ -98,13 +99,16 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
 
         # Save individual PC plot if save_dir is provided
         if save_dir is not None:
-            fig_pc = plt.figure(figsize=(15, 4))
+            fig_pc = plt.figure(figsize=(15, 4))  # Changed from (15, 4)
             ax_pc = fig_pc.add_subplot(111)
 
             # Plot clean reference
             ax_pc.plot(times, f0_clean, color='black', label='Clean', linewidth=2)
 
             # Plot all alpha variations for this PC
+            legend_alphas = unique_alphas[::2]
+            # legend_alphas = unique_alphas
+            # First plot all lines without labels
             for alpha_idx, alpha in enumerate(unique_alphas):
                 variation_key = f'pc{pc_num}_alpha{alpha:.1f}'
                 if variation_key in audio_variations:
@@ -119,16 +123,30 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
                         fmax=400,
                         sr=sample_rate
                     )
+
+                    # Use _nolegend_ for alphas we don't want in legend
+                    if alpha in legend_alphas:
+                        label = f'α={alpha:.1f}'
+                    else:
+                        label = '_nolegend_'
+
                     ax_pc.plot(times, f0, color=colors[alpha_idx],
-                               label=f'α={alpha:.1f}', alpha=0.7)
+                               label=label, alpha=0.7)
 
-            ax_pc.set_title(f'PC Direction {pc_num} Pitch Contours')
-            ax_pc.set_ylabel('Frequency (Hz)')
-            ax_pc.set_xlabel('Time (s)')
+            # Set empty title and larger fonts
+            ax_pc.set_title('')
+            ax_pc.set_ylabel('Frequency (Hz)', fontsize=20)
+            ax_pc.set_xlabel('Time (s)', fontsize=20)
+            ax_pc.tick_params(axis='both', labelsize=18)
             ax_pc.grid(True)
-            ax_pc.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
 
-            fig_pc.tight_layout()
+            # # Add legend on the right side
+            ax_pc.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+
+            # Adjust the plot to fill the figure properly
+            plt.subplots_adjust(right=0.85, top=0.98, bottom=0.15, left=0.1)
+
+            # Save figure
             fig_pc.savefig(sample_dir / f'pc_{pc_num}_pitch.png', bbox_inches='tight')
             plt.close(fig_pc)
 
@@ -276,7 +294,7 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
 
     # Get mask indices in spec domain from metadata
     spec_start_idx = metadata['mask_start_frame_idx'][0]
-    spec_end_idx = metadata['mask_end_frame_idx'][0]
+    spec_end_idx = metadata['mask_end_frame_idx'][0] + 1
 
     # Calculate context window (same duration as mask on each side)
     mask_duration = spec_end_idx - spec_start_idx
@@ -290,22 +308,52 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
 
     def save_individual_spectrogram(data, title, filename):
         """Helper function to save individual spectrograms"""
+        # Set font sizes
+        plt.rcParams.update({'font.size': 14})  # Base font size
+
         fig_single, ax = plt.subplots(figsize=(10, 6))
+
+        # Calculate frequency values for y-axis
+        sample_rate = 16000  # Hz
+        n_fft = 255  # FFT size
+        n_freq_bins = data.shape[0]  # Should be 128 (n_fft//2 + 1)
+        freqs = np.linspace(0, sample_rate / 2, n_freq_bins)  # Array of frequency values
+
+        # Plot spectrogram with frequency y-axis
         im = ax.imshow(data, origin='lower', aspect='auto',
                        vmin=vmin if 'error' not in filename else vmin_err,
                        vmax=vmax if 'error' not in filename else vmax_err,
-                       extent=[plot_start_time, plot_end_time, 0, data.shape[0]])
-        ax.set_title(title)
-        plt.colorbar(im, ax=ax)
+                       extent=[plot_start_time, plot_end_time, freqs[0], freqs[-1]])
 
-        # Add vertical lines to show mask region if needed
-        if not filename.startswith('pc_direction'):
-            ax.axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
-            ax.axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+        # Add colorbar with larger font
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.ax.tick_params(labelsize=12)  # Colorbar tick font size
+
+        # # Add vertical lines to show mask region if needed
+        # if not filename.startswith('pc_direction'):
+        #     ax.axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+        #     ax.axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+
+        ax.axvline(x=spec_start_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+        ax.axvline(x=spec_end_idx * time_per_column, color='r', linestyle='--', alpha=0.5)
+
+        # Set axis labels with larger font
+        ax.set_xlabel('Time (s)', fontsize=18)
+        ax.set_ylabel('Frequency (kHz)', fontsize=18)
+
+        # Set y-ticks at meaningful frequencies with larger font
+        yticks = np.arange(0, sample_rate / 2 + 1, 2000)
+        ax.set_yticks(yticks)
+        ax.set_yticklabels([f'{int(f / 1000)}' for f in yticks], fontsize=12)
+
+        # Set x-ticks font size
+        ax.tick_params(axis='x', labelsize=12)
 
         plt.tight_layout()
         fig_single.savefig(sample_dir / filename)
         plt.close(fig_single)
+
+
 
     # Clean spectrogram
     clean_mag_db = clean_spec[0, 0, :, :]
@@ -318,7 +366,7 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     # Save individual clean spectrogram
     save_individual_spectrogram(
         clean_mag_db[:, context_start_idx:context_end_idx].numpy(),
-        'Clean Spectrogram',
+        '',
         'clean_spec.png'
     )
 
@@ -332,7 +380,7 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     # Save individual masked spectrogram
     save_individual_spectrogram(
         masked_mag_db[:, context_start_idx:context_end_idx].numpy(),
-        'Masked Spectrogram',
+        '',
         'masked_spec.png'
     )
 
@@ -346,7 +394,7 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     # Save individual output spectrogram
     save_individual_spectrogram(
         output_mag_db[:, context_start_idx:context_end_idx].numpy(),
-        'Model Output Spectrogram',
+        '',
         'output_spec.png'
     )
 
@@ -360,7 +408,7 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
     # Save individual error spectrogram
     save_individual_spectrogram(
         error_db[:, context_start_idx:context_end_idx].numpy(),
-        'Reconstruction Error (dB)',
+        '',
         'error_spec.png'
     )
 
@@ -403,7 +451,7 @@ def plot_pc_spectrograms(masked_spec, clean_spec, pred_spec_mag, pc_directions_m
         # Save individual PC direction spectrogram
         save_individual_spectrogram(
             pc_dir_db[:, context_start_idx:context_end_idx].cpu().numpy(),
-            f'PC Direction {i + 1} (dB)',
+            '',
             f'pc_direction_{i + 1}.png'
         )
 
@@ -478,7 +526,7 @@ def get_with_full_audio(clean_audio_full, pred_subsample_audio, metadata):
 
 
 def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directions_mag, clean_spec, mask, masked_audio,
-                             metadata, alphas, save_dir,pitch_save_path, mean, std, sample_idx,
+                             metadata, alphas, save_dir, pitch_save_path, mean, std, sample_idx,
                              n_fft=255, hop_length=128, sample_rate=16000, analyze_phonemes=False):
     """
     Save audio variations, their pitch analyses, and transcriptions
@@ -610,6 +658,249 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
 
     return {'transcriptions': transcriptions, 'phonemes': phonemes}
 
+#
+# def calculate_unet_baseline(model, masked_spec, mask, n_mc_samples=50, n_components=5):
+#     """
+#     Calculate U-Net baseline with MC Dropout and PCA analysis
+#
+#     Args:
+#         model: The U-Net model
+#         masked_spec: Masked spectrogram input [B, 1, F, T]
+#         mask: Binary mask [B, 1, F, T] (1 for known regions, 0 for inpainting area)
+#         n_mc_samples: Number of MC dropout samples
+#         n_components: Number of principal components to extract
+#     Returns:
+#         dict containing:
+#         - mean_prediction: [1, 1, F, T]
+#         - principal_components: [1, n_components, F, T]  # Exactly this shape
+#         - importance_weights: [n_components]
+#     """
+#     # Enable dropout
+#     enable_dropout(model)
+#
+#     # Collect MC samples
+#     mc_predictions = []
+#     for _ in range(n_mc_samples):
+#         with torch.no_grad():
+#             pred = model(masked_spec, mask)  # Shape: [B, 1, F, T]
+#             # Extract only the inpainting area
+#             pred_inpaint = pred[mask == 0]  # Shape: [N_masked_elements]
+#             mc_predictions.append(pred_inpaint)
+#
+#     # Stack predictions: [n_mc, N_masked_elements]
+#     mc_predictions = torch.stack(mc_predictions)
+#
+#     # Reshape for PCA: [n_mc, B, N_masked_per_batch]
+#     B = masked_spec.shape[0]
+#     N_masked_per_batch = (~mask.bool()).sum() // B  # Number of masked elements per batch item
+#     predictions_flat = mc_predictions.reshape(n_mc_samples, B, N_masked_per_batch)
+#
+#     # Apply PCA analysis
+#     principal_components, importance_weights, mean_prediction = compute_pca_and_importance_weights(predictions_flat)
+#     # turn to torch, move back to the device:
+#     device = masked_spec.device
+#     principal_components = torch.from_numpy(principal_components).to(device)
+#     importance_weights = torch.from_numpy(importance_weights).to(device)
+#     mean_prediction = mean_prediction.to(device)
+#
+#     # Reconstruct full spectrograms with zeros in known regions
+#     _, F, T = masked_spec.shape[1:]
+#
+#     # Helper function to reconstruct full spectrogram
+#     def reconstruct_full_spec(inpaint_values):
+#         full_spec = torch.zeros((F, T), device=masked_spec.device)
+#         full_spec.reshape(-1)[mask[0, 0].reshape(-1) == 0] = inpaint_values
+#         return full_spec
+#
+#     # Reshape principal components back to full spectrograms
+#     principal_components = principal_components.reshape(n_components, N_masked_per_batch)
+#
+#     # Reconstruct each PC and stack them
+#     full_pcs = torch.stack([
+#         reconstruct_full_spec(pc) for pc in principal_components
+#     ])  # [n_components, F, T]
+#
+#     # Reshape to desired output shape [1, n_components, F, T]
+#     full_pcs = full_pcs.unsqueeze(0)  # [1, n_components, F, T]
+#
+#     # Reshape mean prediction to full spectrogram [1, 1, F, T]
+#     mean_prediction = mean_prediction.reshape(N_masked_per_batch)
+#     full_mean = reconstruct_full_spec(mean_prediction).unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
+#
+#     # Add shape assertions to verify
+#     assert full_pcs.shape == (
+#         1, n_components, F, T), f"PC shape is {full_pcs.shape}, expected (1, {n_components}, {F}, {T})"
+#     assert full_mean.shape == (1, 1, F, T), f"Mean shape is {full_mean.shape}, expected (1, 1, {F}, {T})"
+#
+#     return {
+#         'mean_prediction': full_mean,
+#         'principal_components': full_pcs,
+#         'importance_weights': importance_weights
+#     }
+
+
+def compute_metrics(nppc_directions, mc_dropout_directions, pred_spec_mag, mean_prediction, clean_spec_mag, mask):
+    """
+    Compute comparison metrics between NPPC and MC-Dropout PCA
+
+    Args:
+        nppc_directions: NPPC directions [1, n_components, F, T]
+        mc_dropout_directions: MC-Dropout PCA directions [1, n_components, F, T]
+        pred_spec_mag: Predicted spectrogram [1, 1, F, T]
+        mean_prediction: Predicted mean spectrogram of the mc dropout method [1, 1, F, T]
+        clean_spec_mag: Ground truth spectrogram [1, 1, F, T]
+        mask: Binary mask [1, 1, F, T] (1 for known regions, 0 for inpainting area)
+
+    Returns:
+        dict containing metrics for both methods
+    """
+
+    def compute_rmse(pred, target, mask):
+        """Compute RMSE only in the inpainting region"""
+        error = pred - target
+        masked_error = error[mask == 0]
+        return torch.norm(masked_error).item()
+
+    def compute_residual_error_magnitude(error, directions):
+        """
+        Compute ||e - WW^T e||_2 where e is the error and W are the principal directions
+        """
+        # Flatten the error and directions for the masked region
+        # error_flat = error[mask == 0].reshape(1, -1)  # [1, N]
+        error_flat = error.reshape(error.shape[1], -1)
+        directions_flat = directions.reshape(directions.shape[1], -1)  # [n_components, N]
+
+        directions_flat_normalized = directions_flat
+        directions_flat_norms = directions_flat.norm(dim=1) + 1e-6
+        directions_flat_normalized = directions_flat / directions_flat_norms[:, None]
+
+        # Compute W(W^T e)
+        wt_e = torch.matmul(directions_flat_normalized, error_flat.T)  # [n_components, 1]
+        w_wt_e = torch.matmul(directions_flat_normalized.T, wt_e)  # [N, 1]
+
+        # Compute ||e - WW^T e||_2
+        residual = error_flat.T - w_wt_e
+        return torch.norm(residual).item()
+
+    def compute_principal_angle(nppc_dirs, mc_dirs):
+        """
+        Compute principal angles between two subspaces
+        Returns angles in degrees
+
+        Args:
+            nppc_dirs: NPPC directions [1, n_components, F, T]
+            mc_dirs: MC-Dropout directions [1, n_components, F, T]
+        Returns:
+            list: Principal angles in degrees
+        """
+        # Flatten directions for masked region
+        nppc_flat = nppc_dirs.reshape(nppc_dirs.shape[1], -1)  # [n_components, N]
+        mc_flat = mc_dirs.reshape(mc_dirs.shape[1], -1)  # [n_components, N]
+
+        # Orthonormalize the bases using QR decomposition
+        nppc_q, _ = torch.linalg.qr(nppc_flat.T)
+        mc_q, _ = torch.linalg.qr(mc_flat.T)
+
+        # Compute singular values using svdvals
+        s = torch.linalg.svdvals(torch.matmul(nppc_q.T, mc_q))
+
+        # Convert to angles in degrees
+        angles = torch.arccos(torch.clamp(s, -1, 1)) * 180 / np.pi
+
+        return angles.cpu().tolist()
+
+    # Compute error
+    error = pred_spec_mag - clean_spec_mag
+
+    # Compute metrics
+    metrics = {
+        'nppc': {
+            'rmse': compute_rmse(pred_spec_mag, clean_spec_mag, mask),
+            'residual_error': compute_residual_error_magnitude(error, nppc_directions)
+        },
+        'mc_dropout': {
+            'rmse': compute_rmse(mean_prediction, clean_spec_mag, mask),
+            'residual_error': compute_residual_error_magnitude(error, mc_dropout_directions)
+        },
+        'principal_angles': compute_principal_angle(nppc_directions, mc_dropout_directions)
+    }
+
+    return metrics
+
+
+def save_metrics_to_json(metrics, save_dir, sample_idx):
+    """
+    Save metrics to a JSON file with organized directory structure
+
+    Args:
+        metrics: Dictionary of metrics
+        save_dir: Base directory for saving validation results
+        sample_idx: Index of the current sample
+    """
+    # Convert numpy arrays and tensors to lists
+    json_metrics = {}
+    for method, values in metrics.items():
+        if method == 'principal_angles':
+            # Convert numpy array of angles from radians to degrees
+            json_metrics[method] = [float(angle) for angle in values]
+        else:
+            json_metrics[method] = {
+                k: float(v) if isinstance(v, (torch.Tensor, np.ndarray)) else v
+                for k, v in values.items()
+            }
+
+    # Create validation directory structure
+    metrics_dir = Path(save_dir) / "validation_metrics"
+    metrics_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save to JSON file
+    json_path = metrics_dir / f"sample_{sample_idx}.json"
+    with open(json_path, 'w') as f:
+        json.dump(json_metrics, f, indent=4)
+
+
+# def calculate_unet_baseline(model, masked_spec, mask, n_mc_samples=50, n_components=5):
+#     """
+#     Calculate U-Net baseline with MC Dropout and PCA analysis
+#
+#     Args:
+#         model: The U-Net model
+#         masked_spec: Masked spectrogram input [B, 1, F, T]
+#         mask: Binary mask [B, 1, F, T]
+#         n_mc_samples: Number of MC dropout samples
+#         n_components: Number of principal components to extract
+#     """
+#     # Enable dropout for MC sampling
+#     enable_dropout(model)
+#
+#     # Collect MC samples
+#     mc_predictions = []
+#     for _ in range(n_mc_samples):
+#         with torch.no_grad():
+#             pred = model(masked_spec, mask)  # Shape: [B, 1, F, T]
+#             mc_predictions.append(pred)
+#
+#     # Stack predictions: [n_mc, B, 1, F, T]
+#     mc_predictions = torch.stack(mc_predictions)
+#
+#     # Reshape for PCA: [n_mc, B, -1]
+#     B = masked_spec.shape[0]
+#     predictions_flat = mc_predictions.reshape(n_mc_samples, B, -1)  # Flatten all dimensions after batch
+#
+#     # Apply PCA analysis
+#     principal_components, importance_weights, mean_prediction = compute_pca_and_importance_weights(predictions_flat)
+#
+#     # Reshape components back to spectrogram shape: [n_components, B, 1, F, T]
+#     _, F, T = masked_spec.shape[1:]  # Get F, T from input shape
+#     principal_components = torch.from_numpy(principal_components).reshape(n_components, B, 1, F, T)
+#     mean_prediction = mean_prediction.reshape(B, 1, F, T)
+#
+#     return {
+#         'mean_prediction': mean_prediction,
+#         'principal_components': principal_components,
+#         'importance_weights': importance_weights
+#     }
+
 
 class NPPCModelValidatorConfig(pydantic.BaseModel):
     checkpoint_path: str
@@ -649,7 +940,16 @@ class NPPCModelValidator:
 
             # Get PC directions from model
             pc_directions = self.model(masked_spec_mag_log, mask)
+            # Calculate mc dropout + pca
+            restoration_model = self.model.pretrained_restoration_model
+            mc_dropout_after_pca = calculate_unet_baseline(restoration_model, masked_spec_mag_log, mask)
+            mc_pc_directions = mc_dropout_after_pca['scaled_principal_components']
+            self.model.eval()  # just in case
+            self.model.to(self.device)
             pred_spec_mag_log = self.model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
+            self._validate_with_baseline(masked_spec_mag_log,mask,clean_spec_mag_norm_log,pred_spec_mag_log,sample_idx)
+            self.model.eval()  # just in case
+            self.model.to(self.device)
 
             # Plot results
             spec_save_path = Path(self.config.save_dir) / "spec_variations"
@@ -690,3 +990,38 @@ class NPPCModelValidator:
                 'figure': fig,
                 'pc_directions': pc_directions.cpu()
             }
+
+    def _validate_with_baseline(self, masked_spec, mask, clean_spec,pred_mask_spec, sample_idx,
+                               n_mc_samples=50, n_components=5):
+        """
+        Validate NPPC model and compare with U-Net baseline
+        """
+        # Get NPPC results
+        self.model.eval()
+
+        with torch.no_grad():
+            nppc_directions = self.model(masked_spec, mask)
+
+        # Get MC-Dropout baseline using the restoration model from NPPC
+        mc_dropout_results = calculate_unet_baseline(
+            self.model.pretrained_restoration_model,
+            masked_spec,
+            mask,
+            n_mc_samples=n_mc_samples,
+            n_components=n_components
+        )
+        self.model.pretrained_restoration_model.eval()
+
+        # Compute metrics
+        metrics = compute_metrics(
+            nppc_directions=nppc_directions,
+            mc_dropout_directions=mc_dropout_results['scaled_principal_components'],
+            pred_spec_mag=pred_mask_spec,
+            mean_prediction=mc_dropout_results['mean_prediction'],
+            clean_spec_mag=clean_spec,
+            mask=mask
+        )
+
+        # Save metrics to JSON
+        if self.config.save_dir is not None:
+            save_metrics_to_json(metrics, self.config.save_dir, sample_idx)
