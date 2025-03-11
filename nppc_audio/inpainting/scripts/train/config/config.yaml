@@ -16,6 +16,7 @@ inpainting_training_configuration:
     - "2.044sec_audio_len"
     - "libriSpeech_dataset"
     - "dropout_0.2"
+    - "encoder_decoder_articure"
   # Model configuration
   device: "cuda"
 

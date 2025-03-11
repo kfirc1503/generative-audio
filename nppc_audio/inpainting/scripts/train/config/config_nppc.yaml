@@ -12,6 +12,12 @@ inpainting_nppc_training_configuration:
     - "2.044sec_audio_len"
     - "libri_speech"
   wandb_artifact_name: "nppc_inpainting_model"  # Single artifact for all checkpoints
+
+  nppc_latent_model_configuration:
+    in_channels: 2
+    dropout: 0
+    n_dirs: 5
+
   nppc_model_configuration:
     pretrained_restoration_model_configuration:
       in_channels: 1
@@ -24,7 +30,9 @@ inpainting_nppc_training_configuration:
       project: "generative-audio"
       artifact_name: "restoration_model"
       artifact_version: "latest"
-      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
+#      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
+      checkpoint_filename: "checkpoint_final_20250308_182244.pt"
+
 
     audio_pc_wrapper_configuration:
       n_dirs: 5

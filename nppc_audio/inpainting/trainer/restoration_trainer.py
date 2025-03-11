@@ -159,6 +159,8 @@ class InpaintingTrainer(nn.Module):
 
         # Log everything to wandb at the end
         if self.config.use_wandb:
+            # Log plot to wandb if enabled
+
             wandb.log({
                 "train/final_loss": loss_history[-1],
                 "train/avg_loss": sum(loss_history) / len(loss_history),

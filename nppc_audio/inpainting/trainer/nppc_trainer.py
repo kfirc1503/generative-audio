@@ -19,14 +19,18 @@ from nppc_audio.inpainting.nppc.pc_wrapper import AudioInpaintingPCWrapperConfig
 from nppc_audio.inpainting.networks.unet import UNet, UNetConfig, RestorationWrapper
 from nppc_audio.inpainting.nppc.nppc_model import NPPCModelConfig, NPPCModel
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset, AudioInpaintingConfig, AudioInpaintingSample
+from nppc_audio.inpainting.networks.unet import LatentEncoder, UNetConfig,LatentEncoderConfig
+from nppc_audio.inpainting.nppc.pc_wrapper import gram_schmidt_to_spec_mag
+
 
 import utils
 from nppc_audio.trainer import NPPCAudioTrainer
-from utils import OptimizerConfig, DataLoaderConfig , calculate_unet_baseline
+from utils import OptimizerConfig, DataLoaderConfig, calculate_unet_baseline
 
 
 class NPPCAudioInpaintingTrainerConfig(pydantic.BaseModel):
     nppc_model_configuration: NPPCModelConfig
+    nppc_latent_model_configuration: LatentEncoderConfig
     data_configuration: AudioInpaintingConfig
     dataloader_configuration: DataLoaderConfig
     optimizer_configuration: OptimizerConfig
@@ -62,7 +66,9 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         ## this is suppose to be the same thing
         # self.nppc_model = self.config.nppc_model_configuration.make_instance()
         self.nppc_model = NPPCModel(self.config.nppc_model_configuration)
+        self.nppc_latent_model = LatentEncoder(self.config.nppc_latent_model_configuration)
         self.device = self.config.device
+        self.nppc_latent_model.to(self.device)
         # create data loader:
         dataset = AudioInpaintingDataset(config.data_configuration)
 
@@ -144,7 +150,9 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             batch = (masked_spec, mask_frames, clean_spec)
 
             # Forward and backward pass
-            reconst_err, objective, log_dict = self.base_step(batch)
+            # reconst_err, objective, log_dict = self.base_step(batch)
+            reconst_err, objective, log_dict = self.latent_space_nppc_step(batch)
+
             self.optimizer.zero_grad()
             objective.backward()
 
@@ -240,7 +248,6 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         plt.show()
         return fig
 
-
     def base_step2(self, batch):
         """
         Modified NPPC base step: Projects W_MC onto W_NPPC while preserving the original normalization structure.
@@ -258,9 +265,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         pred_spec_mag_norm_log = self.nppc_model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
 
-
         # now we will get the w_mc -> mc dropout + pca:
-
 
         # Step 2️⃣: Compute MC-Dropout + PCA Results
         restoration_model = self.nppc_model.pretrained_restoration_model
@@ -303,7 +308,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             proj_coeff = torch.sum(w_i * w_mc_i, dim=1)  # [B]
             proj_coeffs.append(proj_coeff)
             curr_reconst_err = 1 - proj_coeff.pow(2)
-            curr_second_moment = (w_norms[:,i].pow(2) - singular_values[:,i].pow(2)).pow(2)
+            curr_second_moment = (w_norms[:, i].pow(2) - singular_values[:, i].pow(2)).pow(2)
             # curr_second_moment = (w_norms[:,i].pow(2) - proj_coeff.detach().pow(2)).pow(2)
 
             reconst_err_list.append(curr_reconst_err)
@@ -384,222 +389,75 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         return reconst_err, objective, log
 
-    # def base_step(self, batch):
-    #     """
-    #     base step function for training the nppc for the inpainting audio task with MC Dropout
-    #     """
-    #     # Preprocess data as before
-    #     masked_spec, mask, clean_spec = batch
-    #     clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec, mask)
-    #
-    #     # Generate w_mat once (without changing dropout state)
-    #     self.nppc_model.pretrained_restoration_model.eval()
-    #
-    #     w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
-    #
-    #     # Enable dropout for MC sampling
-    #     self.nppc_model.pretrained_restoration_model.train()  # Ensure dropout is active
-    #
-    #     # Collect multiple predictions using MC Dropout
-    #     n_mc_samples = 10
-    #     pred_specs = []
-    #     for _ in range(n_mc_samples):
-    #         pred_spec = self.nppc_model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
-    #         pred_specs.append(pred_spec)
-    #
-    #     # Process w_mat as before
-    #     w_mat_ = w_mat.flatten(2)
-    #     w_norms = w_mat_.norm(dim=2) + 1e-6
-    #     w_hat_mat = w_mat_ / w_norms[:, :, None]
-    #
-    #     # Calculate reconstruction errors for all MC samples
-    #     reconst_errs = []
-    #     for pred_spec in pred_specs:
-    #         err = (clean_spec_mag_norm_log - pred_spec).flatten(1)  # [B,F*T]
-    #
-    #         # Normalizing by the error's norm
-    #         err_norm = err.norm(dim=1) + 1e-6
-    #         err = err / err_norm[:, None]
-    #         w_norms_scaled = w_norms / err_norm[:, None]
-    #
-    #         # W hat loss
-    #         err_proj = torch.einsum('bki,bi->bk', w_hat_mat, err)
-    #         reconst_err = 1 - err_proj.pow(2).sum(dim=1)
-    #         reconst_errs.append(reconst_err)
-    #
-    #     # Combine reconstruction errors from all MC samples
-    #     reconst_err_combined = torch.stack(reconst_errs).mean(dim=0)
-    #
-    #     # Second moment loss remains the same
-    #     second_moment_mse = (w_norms.pow(2) - err_proj.detach().pow(2)).pow(2)
-    #
-    #     # Compute final objective
-    #     objective = self._calculate_final_objective(reconst_err_combined, second_moment_mse)
-    #
-    #     # Store logs
-    #     log = {
-    #         'w_mat': w_mat.detach(),
-    #         'err_norm': err_norm.detach(),
-    #         'err_proj': err_proj.detach(),
-    #         'w_norms': w_norms.detach(),
-    #         'reconst_err': reconst_err_combined.detach(),
-    #         'second_moment_mse': second_moment_mse.detach(),
-    #         'objective': objective.detach(),
-    #         'mc_reconst_errs': torch.stack(reconst_errs).detach(),  # Store individual MC errors
-    #         'pred_specs': torch.stack(pred_specs).detach()  # Store all MC predictions
-    #     }
-    #
-    #     return reconst_err_combined, objective, log
+    def latent_space_nppc_step(self, batch):
+        """
+        Perform NPPC in latent space instead of output space.
+        Args:
+            batch: input batch (masked_spec, mask, clean_spec)
 
-    # def base_step(self, batch):
-    #     """
-    #     base step function for training the nppc for the inpainting audio task with MC Dropout
-    #     """
-    #     # Preprocess data
-    #     masked_spec, mask, clean_spec = batch
-    #     clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec, mask)
-    #
-    #     # Get w_mat with restoration model in eval mode
-    #     self.nppc_model.pretrained_restoration_model.eval()
-    #     w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
-    #     n_dirs = w_mat.shape[1]
-    #
-    #     # Enable dropout for MC sampling
-    #     self.nppc_model.pretrained_restoration_model.train()
-    #
-    #     # Collect exactly n_dirs MC samples
-    #     pred_specs = []
-    #     for _ in range(n_dirs):  # n_mc_samples = n_dirs
-    #         pred_spec = self.nppc_model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
-    #         pred_specs.append(pred_spec)
-    #
-    #     # Process w_mat
-    #     w_mat_ = w_mat.flatten(2)
-    #     w_norms = w_mat_.norm(dim=2) + 1e-6
-    #     w_hat_mat = w_mat_ / w_norms[:, :, None]
-    #
-    #     # Calculate errors for all MC samples
-    #     errors = []
-    #     for pred_spec in pred_specs:
-    #         err = (clean_spec_mag_norm_log - pred_spec).flatten(1)
-    #         err_norm = err.norm(dim=1) + 1e-6
-    #         err = err / err_norm[:, None]
-    #         errors.append(err)
-    #
-    #     # Calculate projection matrix
-    #     batch_size = w_mat.shape[0]
-    #     projection_matrix = torch.zeros(n_dirs, n_dirs, batch_size)  # [n_dirs, n_dirs, B]
-    #
-    #     # Calculate all projections
-    #     for i, err in enumerate(errors):
-    #         for j in range(n_dirs):
-    #             w_dir = w_hat_mat[:, j:j + 1, :]  # [B, 1, F*T]
-    #             err_proj = torch.einsum('bki,bi->bk', w_dir, err)  # [B, 1]
-    #             projection_cost = 1 - err_proj.pow(2).sum(dim=1)
-    #             projection_matrix[i, j] = projection_cost
-    #
-    #     # Find optimal assignment for each batch item
-    #     batch_reconst_errs = []
-    #     for b in range(batch_size):
-    #         cost_matrix = projection_matrix[:, :, b].detach().cpu().numpy()
-    #         row_ind, col_ind = linear_sum_assignment(cost_matrix)
-    #         min_cost = cost_matrix[row_ind, col_ind].mean()
-    #         batch_reconst_errs.append(min_cost)
-    #
-    #     reconst_err_combined = torch.tensor(batch_reconst_errs, device=w_mat.device)
-    #
-    #     # Second moment loss remains the same
-    #     err_projs = torch.einsum('bki,bi->bk', w_hat_mat, errors[0])  # Using first error for simplicity
-    #     second_moment_mse = (w_norms.pow(2) - err_projs.detach().pow(2)).pow(2)
-    #
-    #     # Compute final objective
-    #     objective = self._calculate_final_objective(reconst_err_combined, second_moment_mse)
-    #
-    #     # Store logs
-    #     log = {
-    #         'w_mat': w_mat.detach(),
-    #         'reconst_err': reconst_err_combined.detach(),
-    #         'second_moment_mse': second_moment_mse.detach(),
-    #         'objective': objective.detach(),
-    #         'pred_specs': torch.stack(pred_specs).detach(),
-    #         'projection_matrix': projection_matrix.detach()  # Useful for debugging
-    #     }
-    #
-    #     return reconst_err_combined, objective, log
+        Returns:
+            reconst_err_latent, objective_latent, log
+        """
+        # Step 1: Preprocessing data
+        masked_spec, mask, clean_spec = batch
+        clean_spec_norm_log, mask, masked_spec_norm_log = utils.preprocess_data(clean_spec, masked_spec, mask)
+        pred_spec_mag_norm_log = self.nppc_model.get_pred_spec_mag_norm(masked_spec_norm_log, mask)
 
-    # def base_step(self, batch):
-    #     """
-    #     base step function for training the nppc for the inpainting audio task with MC Dropout
-    #     """
-    #     # Preprocess data
-    #     masked_spec, mask, clean_spec = batch
-    #     clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec, mask)
-    #
-    #     # Get w_mat with restoration model in eval mode
-    #     self.nppc_model.pretrained_restoration_model.eval()
-    #     w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
-    #     n_dirs = w_mat.shape[1]
-    #
-    #     # Enable dropout for MC sampling
-    #     self.nppc_model.pretrained_restoration_model.train()
-    #
-    #     # Collect exactly n_dirs MC samples
-    #     pred_specs = []
-    #     for _ in range(n_dirs):  # n_mc_samples = n_dirs
-    #         pred_spec = self.nppc_model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
-    #         pred_specs.append(pred_spec)
-    #
-    #     # Process w_mat
-    #     w_mat_ = w_mat.flatten(2)
-    #     w_norms = w_mat_.norm(dim=2) + 1e-6
-    #     w_hat_mat = w_mat_ / w_norms[:, :, None]
-    #
-    #     # Calculate errors for all MC samples
-    #     errors = []
-    #     for pred_spec in pred_specs:
-    #         err = (clean_spec_mag_norm_log - pred_spec).flatten(1)
-    #         err_norm = err.norm(dim=1) + 1e-6
-    #         err = err / err_norm[:, None]
-    #         errors.append(err)
-    #
-    #     # Option A: Match each direction with corresponding error
-    #     reconst_errs = []
-    #     for i in range(n_dirs):
-    #         # Get i-th direction and i-th error
-    #         w_dir = w_hat_mat[:, i:i + 1, :]  # [B, 1, F*T]
-    #         err = errors[i]  # Take i-th error
-    #
-    #         # Project this error onto this direction
-    #         err_proj = torch.einsum('bki,bi->bk', w_dir, err)  # [B, 1]
-    #         reconst_err = 1 - err_proj.pow(2).sum(dim=1)
-    #         reconst_errs.append(reconst_err)
-    #
-    #     # Combine errors from all direction-error pairs
-    #     reconst_err_combined = torch.stack(reconst_errs).mean(dim=0)  # Average across directions
-    #
-    #     # Second moment loss using all matched pairs
-    #     second_moment_mses = []
-    #     for i in range(n_dirs):
-    #         err_proj = torch.einsum('bki,bi->bk', w_hat_mat[:, i:i + 1, :], errors[i])
-    #         second_moment_mse = (w_norms[:, i].pow(2) - err_proj.detach().pow(2)).pow(2)
-    #         second_moment_mses.append(second_moment_mse)
-    #
-    #     second_moment_mse = torch.stack(second_moment_mses).mean(dim=0)
-    #
-    #     # Compute final objective
-    #     objective = self._calculate_final_objective(reconst_err_combined, second_moment_mse)
-    #
-    #     # Store logs
-    #     log = {
-    #         'w_mat': w_mat.detach(),
-    #         'reconst_err': reconst_err_combined.detach(),
-    #         'second_moment_mse': second_moment_mse.detach(),
-    #         'objective': objective.detach(),
-    #         'pred_specs': torch.stack(pred_specs).detach(),
-    #         'individual_reconst_errs': torch.stack(reconst_errs).detach()  # For debugging
-    #     }
-    #
-    #     return reconst_err_combined, objective, log
+        # Step 2: Encoding into latent space
+        with torch.no_grad():
+            latent_clean , _ = self.nppc_model.pretrained_restoration_model.net.encoder(clean_spec_norm_log)
+            latent_pred , _  = self.nppc_model.pretrained_restoration_model.net.encoder(masked_spec_norm_log)
+
+        # Step 3: Latent Error computation
+        latent_err = latent_clean - latent_pred
+        latent_err_flat = latent_err.flatten(start_dim=1)  # [B, latent_features]
+
+        # Step 4: Predict latent directions
+        # w_latent = self.nppc_latent_model(masked_spec_norm_log, mask)
+        masked_with_pred_spec_mag_norm = torch.cat(
+            (masked_spec_norm_log, pred_spec_mag_norm_log),
+            dim=1
+        )
+
+        w_latent = self.nppc_latent_model(masked_with_pred_spec_mag_norm)
+        w_latent_flat = w_latent.flatten(start_dim=2)  # [B, n_dirs, latent_features]
+
+        # Step 5: Gram-Schmidt normalization (latent space)
+        # still not implemented
+        w_latent_flat = gram_schmidt_to_spec_mag(w_latent_flat)
+
+        w_norms_latent = w_latent_flat.norm(dim=2) + 1e-6
+        w_hat_latent = w_latent_flat / w_norms_latent[:,:, None]
+
+        # Step 6: Project latent error
+        latent_err_norm = latent_err_flat.norm(dim=1) + 1e-6
+        latent_err_normalized = latent_err_flat / latent_err_norm[:, None]
+        w_norms_latent_normalized = w_norms_latent / latent_err_norm[:, None]
+
+        latent_err_proj = torch.einsum('bki,bi->bk', w_hat_latent, latent_err_normalized)
+
+        # Step 7: Latent reconstruction and variance losses
+        reconst_err_latent = 1 - latent_err_proj.pow(2).sum(dim=1)
+        second_moment_mse_latent = (w_norms_latent_normalized.pow(2) - latent_err_proj.detach().pow(2)).pow(2)
+
+        # Step 8: Final combined loss
+        objective_latent = self._calculate_final_objective(
+            reconst_err_latent,
+            second_moment_mse_latent
+        )
+
+        # Logging dictionary
+        log = {
+            'latent_err_norm': latent_err_norm.detach(),
+            'latent_err_proj': latent_err_proj.detach(),
+            'w_norms': w_norms_latent.detach(),
+            'reconst_err': reconst_err_latent.detach(),
+            'second_moment_mse': second_moment_mse_latent.detach(),
+            'objective': objective_latent.detach(),
+            'w_latent': w_latent.detach()
+        }
+
+        return reconst_err_latent, objective_latent, log
 
     def save_checkpoint(self, checkpoint_path):
         """
@@ -719,3 +577,5 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             start_idx = max(0, i - window_size + 1)
             smoothed.append(sum(losses[start_idx:(i + 1)]) / (i - start_idx + 1))
         return smoothed
+
+

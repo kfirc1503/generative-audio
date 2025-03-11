@@ -128,6 +128,10 @@ class UNetConfig(pydantic.BaseModel):
     dropout: float = 0.0
 
 
+class LatentEncoderConfig(UNetConfig):
+    n_dirs: int
+
+
 ##############################################################################
 # Encoder Block
 ##############################################################################
@@ -244,50 +248,103 @@ class UNet2(nn.Module):
         return out
 
 
-class UNet(nn.Module):
-    def __init__(self, config: UNetConfig):
-        super(UNet, self).__init__()
-        self.config = config
-        self.inc = inconv(self.config.in_channels, 64)
+# class UNet(nn.Module):
+#     def __init__(self, config: UNetConfig):
+#         super(UNet, self).__init__()
+#         self.config = config
+#         self.inc = inconv(self.config.in_channels, 64)
+#         self.down1 = down(64, 128)
+#         self.down2 = down(128, 256)
+#         self.down3 = down(256, 512 , dropout=self.config.dropout)
+#         self.down4 = down(512, 512 , dropout=self.config.dropout)
+#         self.up1 = up(1024, 256, dropout=self.config.dropout)
+#         self.up2 = up(512, 128, dropout=self.config.dropout)
+#         self.up3 = up(256, 64)
+#         self.up4 = up(128, 64)
+#         self.outc = outconv(64, self.config.out_channels)
+#
+#
+#         # x = 4
+#         # self.inc = inconv(self.config.in_channels, x)
+#         # self.down1 = down(x, 2*x)
+#         # self.down2 = down(2*x, 4*x)
+#         # self.down3 = down(4*x, 8*x , dropout=0)
+#         # self.down4 = down(8*x, 8*x , dropout=0)
+#         # self.up1 = up(16*x, 4*x, dropout=0)
+#         # self.up2 = up(8*x, 2*x, dropout=0)
+#         # self.up3 = up(4*x, x)
+#         # self.up4 = up(2*x, x)
+#         # self.outc = outconv(x, self.config.out_channels)
+#
+#
+#
+#
+#
+#     def forward(self, x):
+#         x1 = self.inc(x)
+#         x2 = self.down1(x1)
+#         x3 = self.down2(x2)
+#         x4 = self.down3(x3)
+#         x5 = self.down4(x4)
+#         x = self.up1(x5, x4)
+#         x = self.up2(x, x3)
+#         x = self.up3(x, x2)
+#         x = self.up4(x, x1)
+#         x = self.outc(x)
+#         return x
+
+
+class Encoder(nn.Module):
+    def __init__(self, in_channels=1, dropout=0):
+        super(Encoder, self).__init__()
+        self.inc = inconv(in_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
-        self.down3 = down(256, 512 , dropout=self.config.dropout)
-        self.down4 = down(512, 512 , dropout=self.config.dropout)
-        self.up1 = up(1024, 256, dropout=self.config.dropout)
-        self.up2 = up(512, 128, dropout=self.config.dropout)
-        self.up3 = up(256, 64)
-        self.up4 = up(128, 64)
-        self.outc = outconv(64, self.config.out_channels)
-
-
-        # x = 4
-        # self.inc = inconv(self.config.in_channels, x)
-        # self.down1 = down(x, 2*x)
-        # self.down2 = down(2*x, 4*x)
-        # self.down3 = down(4*x, 8*x , dropout=0)
-        # self.down4 = down(8*x, 8*x , dropout=0)
-        # self.up1 = up(16*x, 4*x, dropout=0)
-        # self.up2 = up(8*x, 2*x, dropout=0)
-        # self.up3 = up(4*x, x)
-        # self.up4 = up(2*x, x)
-        # self.outc = outconv(x, self.config.out_channels)
-
-
-
-
+        self.down3 = down(256, 512, dropout=dropout)
+        self.down4 = down(512, 512, dropout=dropout)
 
     def forward(self, x):
+        # Store intermediate outputs for skip connections
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        x = self.up1(x5, x4)
-        x = self.up2(x, x3)
-        x = self.up3(x, x2)
-        x = self.up4(x, x1)
+
+        return x5, [x4, x3, x2, x1]
+
+
+class Decoder(nn.Module):
+    def __init__(self, out_channels=1, dropout=0):
+        super(Decoder, self).__init__()
+        self.up1 = up(1024, 256, dropout=dropout)  # 512 + 512 = 1024
+        self.up2 = up(512, 128, dropout=dropout)  # 256 + 256 = 512
+        self.up3 = up(256, 64)  # 128 + 128 = 256
+        self.up4 = up(128, 64)  # 64 + 64 = 128
+        self.outc = outconv(64, out_channels)
+
+    def forward(self, x, skip_connections):
+        x = self.up1(x, skip_connections[0])
+        x = self.up2(x, skip_connections[1])
+        x = self.up3(x, skip_connections[2])
+        x = self.up4(x, skip_connections[3])
         x = self.outc(x)
         return x
+
+
+class UNet(nn.Module):
+    def __init__(self, config: UNetConfig):
+        super(UNet, self).__init__()
+        self.config = config
+        self.encoder = Encoder(self.config.in_channels, dropout=self.config.dropout)
+        self.decoder = Decoder(self.config.out_channels, dropout=self.config.dropout)
+
+    def forward(self, x):
+        # Get encoder output and skip connections
+        encoded, skip_connections = self.encoder(x)
+        # Pass to decoder
+        decoded = self.decoder(encoded, skip_connections)
+        return decoded
 
 
 class RestorationWrapper(nn.Module):
@@ -302,12 +359,50 @@ class RestorationWrapper(nn.Module):
         # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
         mask_broadcasted = mask
         if x.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
-            mask_broadcasted = mask_broadcasted.expand(-1, x.shape[1], -1,-1)  # Broadcast along the channel dimension
+            mask_broadcasted = mask_broadcasted.expand(-1, x.shape[1], -1, -1)  # Broadcast along the channel dimension
         # Apply inpainting
         if x_in.shape[1] > 1:
-            masked_spec = x_in[:,0,:,:]
-            masked_spec = masked_spec.unsqueeze(1).expand(-1,mask_broadcasted.shape[1],-1,-1)
+            masked_spec = x_in[:, 0, :, :]
+            masked_spec = masked_spec.unsqueeze(1).expand(-1, mask_broadcasted.shape[1], -1, -1)
             x = masked_spec * mask_broadcasted + x * (1 - mask_broadcasted)
         else:
             x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
         return x
+
+
+class LatentEncoder(nn.Module):
+    def __init__(self, config:LatentEncoderConfig):
+        super(LatentEncoder, self).__init__()
+
+        self.n_dirs = config.n_dirs
+        n_dirs = config.n_dirs
+        dropout = config.dropout
+        in_channels = config.in_channels
+
+
+        # Keep exact same architecture as original UNet
+        self.inc = inconv(in_channels, 64)
+        self.down1 = down(64, 128)
+        self.down2 = down(128, 256)
+        self.down3 = down(256, 512, dropout=dropout)
+        # Modified last down layer to have n_dirs * 512 channels
+        self.down4 = down(512, 512 * n_dirs, dropout=dropout)
+
+    def forward(self, x):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)  # Shape: [B, 512*n_dirs, H, W]
+
+        # Reshape to separate n_dirs dimension using C // n_dirs
+        B, C, H, W = x5.shape
+        x5 = x5.view(B, self.n_dirs, C // self.n_dirs, H, W)  # Shape: [B, n_dirs, C//n_dirs, H, W]
+
+        return x5
+
+# Example usage:
+# encoder = LatentEncoder(in_channels=1, n_dirs=5)
+# x = torch.randn(128, 1, 128, 256)
+# latent = encoder(x)
+# print(latent.shape)  # Should be [128, 5, 512, 8, 16]
