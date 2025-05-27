@@ -347,27 +347,50 @@ class UNet(nn.Module):
         return decoded
 
 
-class RestorationWrapper(nn.Module):
-    def __init__(self, base_net: UNet):
-        super().__init__()
-        self.net = base_net
+# class RestorationWrapper(nn.Module):
+#     def __init__(self, base_net: UNet):
+#         super().__init__()
+#         self.net = base_net
+#
+#     def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
+#         # input dims of the mask are [B,1,F,T]
+#         # the dims of x change according to the in_channels config
+#         x = self.net(x_in)
+#         # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
+#         mask_broadcasted = mask
+#         if x.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
+#             mask_broadcasted = mask_broadcasted.expand(-1, x.shape[1], -1, -1)  # Broadcast along the channel dimension
+#         # Apply inpainting
+#         if x_in.shape[1] > 1:
+#             masked_spec = x_in[:, 0, :, :]
+#             masked_spec = masked_spec.unsqueeze(1).expand(-1, mask_broadcasted.shape[1], -1, -1)
+#             x = masked_spec * mask_broadcasted + x * (1 - mask_broadcasted)
+#         else:
+#             x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
+#         return x
 
-    def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
-        # input dims of the mask are [B,1,F,T]
-        # the dims of x change according to the in_channels config
-        x = self.net(x_in)
-        # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
-        mask_broadcasted = mask
-        if x.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
-            mask_broadcasted = mask_broadcasted.expand(-1, x.shape[1], -1, -1)  # Broadcast along the channel dimension
-        # Apply inpainting
-        if x_in.shape[1] > 1:
-            masked_spec = x_in[:, 0, :, :]
-            masked_spec = masked_spec.unsqueeze(1).expand(-1, mask_broadcasted.shape[1], -1, -1)
-            x = masked_spec * mask_broadcasted + x * (1 - mask_broadcasted)
-        else:
-            x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
+
+class RestorationWrapper(nn.Module):
+    def __init__(self, net):
+        super().__init__()
+
+        self.net = net
+        # self.mask = mask
+
+    def forward(self, x, mask):
+        x_in = x
+
+        # x = (x - 0.5) / 0.2
+        x = self.net(x)
+        # x = (x * 0.2) + 0.5
+
+        x = x_in + x * mask
         return x
+
+
+
+
+
 
 
 class LatentEncoder(nn.Module):
@@ -388,18 +411,22 @@ class LatentEncoder(nn.Module):
         # Modified last down layer to have n_dirs * 512 channels
         self.down4 = down(512, 512 * n_dirs, dropout=dropout)
 
-    def forward(self, x):
+    def forward(self, x,mask):
         x1 = self.inc(x)
         x2 = self.down1(x1)
+        mask2 = F.max_pool2d(mask, kernel_size=2)
         x3 = self.down2(x2)
+        mask3 = F.max_pool2d(mask2, kernel_size=2)
         x4 = self.down3(x3)
-        x5 = self.down4(x4)  # Shape: [B, 512*n_dirs, H, W]
-
+        mask4 = F.max_pool2d(mask3, kernel_size=2)
+        x5 = self.down4(x4)
+        mask5 = F.max_pool2d(mask4, kernel_size=2)  # Final mask in latent space
         # Reshape to separate n_dirs dimension using C // n_dirs
         B, C, H, W = x5.shape
         x5 = x5.view(B, self.n_dirs, C // self.n_dirs, H, W)  # Shape: [B, n_dirs, C//n_dirs, H, W]
 
-        return x5
+        return x5, mask5
+        # return x5
 
 # Example usage:
 # encoder = LatentEncoder(in_channels=1, n_dirs=5)

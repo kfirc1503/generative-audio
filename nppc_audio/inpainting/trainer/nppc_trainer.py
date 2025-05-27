@@ -69,29 +69,52 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         self.nppc_latent_model = LatentEncoder(self.config.nppc_latent_model_configuration)
         self.device = self.config.device
         self.nppc_latent_model.to(self.device)
+        self.nppc_latent_model.train()
         # create data loader:
+        # dataset = AudioInpaintingDataset(config.data_configuration)
+        mask = torch.zeros((1, 28, 28)).to(self.device)
+        mask[:, :20, :] = 1.
+        # mask = 1 - mask
+        self.mask = mask
+
+
         dataset = AudioInpaintingDataset(config.data_configuration)
+        train_set = torchvision.datasets.MNIST(root='./', download=True, train=True,
+                                               transform=torchvision.transforms.ToTensor())
+
+        dataloader = torch.utils.data.DataLoader(
+            train_set,
+            batch_size=config.dataloader_configuration.batch_size,
+            shuffle=True,
+        )
 
         print(f"Total sample pairs in dataset: {len(dataset)}")
 
         # Create dataloader
-        dataloader = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=config.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
-            shuffle=config.dataloader_configuration.shuffle,
-            num_workers=config.dataloader_configuration.num_workers,
-            pin_memory=config.dataloader_configuration.pin_memory,
-            collate_fn=utils.collate_fn
-
-        )
+        # dataloader = torch.utils.data.DataLoader(
+        #     dataset,
+        #     batch_size=config.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
+        #     shuffle=config.dataloader_configuration.shuffle,
+        #     num_workers=config.dataloader_configuration.num_workers,
+        #     pin_memory=config.dataloader_configuration.pin_memory,
+        #     collate_fn=utils.collate_fn
+        #
+        # )
         self.dataloader = dataloader
 
         self.step = 0
 
         # Initialize optimizer
+        # optimizer_class = getattr(optim, config.optimizer_configuration.type)
+        # self.optimizer = optimizer_class(
+        #     self.nppc_model.parameters(),
+        #     **config.optimizer_configuration.args,
+        #     # weight_decay=1e-4
+        # )
+
         optimizer_class = getattr(optim, config.optimizer_configuration.type)
         self.optimizer = optimizer_class(
-            self.nppc_model.parameters(),
+            self.nppc_latent_model.parameters(),
             **config.optimizer_configuration.args,
             # weight_decay=1e-4
         )
@@ -140,24 +163,26 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         for batch in pbar:
             # Move batch to device
             # Unpack batch including metadata
-            masked_spec, mask_frames, clean_spec, masked_audio, metadata = batch
-
-            # Move tensors to device
-            masked_spec = masked_spec.to(self.device)
-            mask_frames = mask_frames.to(self.device)
-            clean_spec = clean_spec.to(self.device)
-
-            batch = (masked_spec, mask_frames, clean_spec)
-
+            # masked_spec, mask_frames, clean_spec, masked_audio, metadata = batch
+            #
+            # # Move tensors to device
+            # masked_spec = masked_spec.to(self.device)
+            # mask_frames = mask_frames.to(self.device)
+            # clean_spec = clean_spec.to(self.device)
+            #
+            # batch = (masked_spec, mask_frames, clean_spec)
+            images,labels = batch
+            images = images.to(self.device)
+            labels = labels.to(self.device)
             # Forward and backward pass
-            # reconst_err, objective, log_dict = self.base_step(batch)
-            reconst_err, objective, log_dict = self.latent_space_nppc_step(batch)
+            # reconst_err, objective, log_dict = self.base_step((images, labels))
+            reconst_err, objective, log_dict = self.latent_space_nppc_mnist_step((images, labels))
 
             self.optimizer.zero_grad()
             objective.backward()
 
             # Apply gradient clipping
-            torch.nn.utils.clip_grad_norm_(self.nppc_model.parameters(), max_norm=self.config.max_grad_norm)
+            # torch.nn.utils.clip_grad_norm_(self.nppc_model.parameters(), max_norm=self.config.max_grad_norm)
 
             self.optimizer.step()
 
@@ -340,6 +365,55 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         return reconst_err, objective, log
 
+    # def base_step(self, batch):
+    #     """
+    #     base step function for training the nppc for the inpainting audio task
+    #     Args:
+    #         batch:
+    #
+    #     Returns:
+    #
+    #     """
+    #     # firstly we should move the spec into a mag norm log specs:
+    #     # masked_spec, mask, clean_spec = batch
+    #     masked_spec, mask, clean_spec = batch  # ignore masked_spec
+    #     clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec, mask)
+    #
+    #     w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
+    #
+    #     w_mat_ = w_mat.flatten(2)
+    #     w_norms = w_mat_.norm(dim=2) + 1e-6
+    #     w_hat_mat = w_mat_ / w_norms[:, :, None]
+    #
+    #     pred_spec_mag_norm_log = self.nppc_model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
+    #     err = (clean_spec_mag_norm_log - pred_spec_mag_norm_log).flatten(1)  # [B,F*T]
+    #
+    #     ## Normalizing by the error's norm
+    #     ## -------------------------------
+    #     err_norm = err.norm(dim=1) + 1e-6
+    #     err = err / err_norm[:, None]
+    #     w_norms = w_norms / err_norm[:, None]
+    #
+    #     ## W hat loss
+    #     ## ----------
+    #     err_proj = torch.einsum('bki,bi->bk', w_hat_mat, err)
+    #     reconst_err = 1 - err_proj.pow(2).sum(dim=1)
+    #     second_moment_mse = (w_norms.pow(2) - err_proj.detach().pow(2)).pow(2)
+    #     # Compute final objective with adaptive weighting
+    #     objective = self._calculate_final_objective(reconst_err, second_moment_mse)
+    #     # Store logs
+    #     log = {
+    #         'w_mat': w_mat.detach(),
+    #         'err_norm': err_norm.detach(),
+    #         'err_proj': err_proj.detach(),  # Keeping the complex projection for logging if needed
+    #         'w_norms': w_norms.detach(),
+    #         'reconst_err': reconst_err.detach(),
+    #         'second_moment_mse': second_moment_mse.detach(),
+    #         'objective': objective.detach()
+    #     }
+    #
+    #     return reconst_err, objective, log
+
     def base_step(self, batch):
         """
         base step function for training the nppc for the inpainting audio task
@@ -351,17 +425,28 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         """
         # firstly we should move the spec into a mag norm log specs:
         # masked_spec, mask, clean_spec = batch
-        masked_spec, mask, clean_spec = batch  # ignore masked_spec
-        clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec, mask)
+        # masked_spec, mask, clean_spec = batch  # ignore masked_spec
 
-        w_mat = self.nppc_model(masked_spec_mag_log, mask)  # [B,n_dirs,F,T]
+        x_org = batch[0]
+        x_distorted = x_org * (1 - self.mask)
+        broadcasted_mask =  self.mask.view(1, 1, 28, 28).expand(x_org.shape[0], 1, 28, 28)
+        with torch.no_grad():
+            x_pred = self.nppc_model.pretrained_restoration_model(x_distorted, self.mask)
+        # x_distorted_and_pred = torch.cat(
+        #     (x_distorted, x_pred),
+        #     dim=1
+        # )
+
+        # clean_spec_mag_norm_log, mask, masked_spec_mag_log = utils.preprocess_data(clean_spec, masked_spec, mask)
+
+        # w_mat = self.nppc_model(x_distorted, 1 - broadcasted_mask)  # [B,n_dirs,F,T]
+        w_mat = self.nppc_model(x_distorted, broadcasted_mask)  # [B,n_dirs,F,T]
 
         w_mat_ = w_mat.flatten(2)
         w_norms = w_mat_.norm(dim=2) + 1e-6
         w_hat_mat = w_mat_ / w_norms[:, :, None]
 
-        pred_spec_mag_norm_log = self.nppc_model.get_pred_spec_mag_norm(masked_spec_mag_log, mask)
-        err = (clean_spec_mag_norm_log - pred_spec_mag_norm_log).flatten(1)  # [B,F*T]
+        err = (x_org - x_pred).flatten(1)  # [B,F*T]
 
         ## Normalizing by the error's norm
         ## -------------------------------
@@ -388,6 +473,7 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         }
 
         return reconst_err, objective, log
+
 
     def latent_space_nppc_step(self, batch):
         """
@@ -459,6 +545,97 @@ class NPPCAudioInpaintingTrainer(nn.Module):
 
         return reconst_err_latent, objective_latent, log
 
+    def latent_space_nppc_mnist_step(self, batch):
+        """
+        Perform NPPC in latent space instead of output space.
+        Args:
+            batch: input batch (masked_spec, mask, clean_spec)
+
+        Returns:
+            reconst_err_latent, objective_latent, log
+        """
+        # Step 1: Preprocessing data
+        # masked_spec, mask, clean_spec = batch
+        # clean_spec_norm_log, mask, masked_spec_norm_log = utils.preprocess_data(clean_spec, masked_spec, mask)
+        # pred_spec_mag_norm_log = self.nppc_model.get_pred_spec_mag_norm(masked_spec_norm_log, mask)
+
+
+        x_org = batch[0]
+        x_distorted = x_org * (1 - self.mask)
+        broadcasted_mask =  self.mask.view(1, 1, 28, 28).expand(x_org.shape[0], 1, 28, 28)
+        # x_predict = self.nppc_model.get_pred_spec_mag_norm(x_distorted, 1 - broadcasted_mask)
+        self.nppc_model.pretrained_restoration_model.eval() # might not be necessary
+        # Step 2: Encoding into latent space
+        with torch.no_grad():
+            x_predict = self.nppc_model.pretrained_restoration_model(x_distorted, self.mask)
+            latent_clean , _ = self.nppc_model.pretrained_restoration_model.net.encoder(x_org)
+            # latent_pred , _  = self.nppc_model.pretrained_restoration_model.net.encoder(x_distorted)
+            # instead passing distorted at encoder of restoration model, let's passed the predict !
+            latent_pred , _ = self.nppc_model.pretrained_restoration_model.net.encoder(x_predict)
+
+            # x_predict = self.nppc_model.pretrained_restoration_model(x_distorted, 1 - broadcasted_mask)
+
+        # Step 3: Latent Error computation
+        latent_err = latent_clean - latent_pred
+        latent_err_flat = latent_err.flatten(start_dim=1)  # [B, latent_features]
+
+        # Step 4: Predict latent directions
+        # w_latent = self.nppc_latent_model(masked_spec_norm_log, mask)
+        masked_with_pred_spec_mag_norm = torch.cat(
+            (x_distorted, x_predict),
+            dim=1
+        )
+
+        w_latent, latent_mask = self.nppc_latent_model(masked_with_pred_spec_mag_norm, broadcasted_mask)
+
+        latent_mask_flat = latent_mask.flatten(start_dim=1)  # [B, latent_features]
+        latent_err_flat = latent_err_flat * latent_mask_flat
+
+        latent_mask_flat_expanded = latent_mask_flat.unsqueeze(1)
+        latent_mask_flat_broadcasted = latent_mask_flat_expanded.expand(-1, w_latent.shape[1], -1)
+
+        w_latent_flat = w_latent.flatten(start_dim=2)  # [B, n_dirs, latent_features]
+
+        w_latent_flat = w_latent_flat * latent_mask_flat_broadcasted
+
+        # Step 5: Gram-Schmidt normalization (latent space)
+        # still not implemented
+        w_latent_flat = gram_schmidt_to_spec_mag(w_latent_flat)
+
+        w_norms_latent = w_latent_flat.norm(dim=2) + 1e-6
+        w_hat_latent = w_latent_flat / w_norms_latent[:,:, None]
+
+        # Step 6: Project latent error
+        latent_err_norm = latent_err_flat.norm(dim=1) + 1e-6
+        latent_err_normalized = latent_err_flat / latent_err_norm[:, None]
+        w_norms_latent_normalized = w_norms_latent / latent_err_norm[:, None]
+
+        latent_err_proj = torch.einsum('bki,bi->bk', w_hat_latent, latent_err_normalized)
+
+        # Step 7: Latent reconstruction and variance losses
+        reconst_err_latent = 1 - latent_err_proj.pow(2).sum(dim=1)
+        second_moment_mse_latent = (w_norms_latent_normalized.pow(2) - latent_err_proj.detach().pow(2)).pow(2)
+
+        # Step 8: Final combined loss
+        objective_latent = self._calculate_final_objective(
+            reconst_err_latent,
+            second_moment_mse_latent
+        )
+
+        # Logging dictionary
+        log = {
+            'latent_err_norm': latent_err_norm.detach(),
+            'latent_err_proj': latent_err_proj.detach(),
+            'w_norms': w_norms_latent.detach(),
+            'reconst_err': reconst_err_latent.detach(),
+            'second_moment_mse': second_moment_mse_latent.detach(),
+            'objective': objective_latent.detach(),
+            'w_latent': w_latent.detach()
+        }
+
+        return reconst_err_latent, objective_latent, log
+
+
     def save_checkpoint(self, checkpoint_path):
         """
         Save model checkpoint including model state, optimizer state, and training info
@@ -466,11 +643,18 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         Args:
             checkpoint_path: Path to save checkpoint
         """
+        # checkpoint = {
+        #     'model_state_dict': self.nppc_model.state_dict(),
+        #     'optimizer_state_dict': self.optimizer.state_dict(),
+        #     'step': self.step,
+        # }
+
         checkpoint = {
-            'model_state_dict': self.nppc_model.state_dict(),
+            'model_state_dict': self.nppc_latent_model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'step': self.step,
         }
+
         os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
         torch.save(checkpoint, checkpoint_path)
         print(f"Checkpoint saved to {checkpoint_path}")

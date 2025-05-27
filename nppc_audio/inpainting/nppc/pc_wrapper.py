@@ -79,7 +79,9 @@ class AudioInpaintingPCWrapper(nn.Module):
         if alternatives_pred.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
             mask_broadcasted = mask_broadcasted.expand(-1, alternatives_pred.shape[1], -1,-1)  # Broadcast along the channel dimension
         # Apply inpainting
-        alternatives_pred = alternatives_pred * (1 - mask_broadcasted)
+        # alternatives_pred = alternatives_pred * (1 - mask_broadcasted)
+        alternatives_pred = alternatives_pred * mask_broadcasted
+
         tmp = alternatives_pred.detach().cpu().numpy()
         # Apply Gram-Schmidt orthogonalization
         w_mat = gram_schmidt_to_spec_mag(alternatives_pred)

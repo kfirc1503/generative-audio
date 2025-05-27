@@ -1,5 +1,7 @@
-n_epochs: 6
-checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
+n_epochs: 12
+#checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
+checkpoint_dir: "../../../../../../data/inpainting/nppc_model_mnist/checkpoint"
+
 inpainting_nppc_training_configuration:
   device: "cuda"
   second_moment_loss_lambda: 1
@@ -11,7 +13,7 @@ inpainting_nppc_training_configuration:
     - "use_vad"              # voice activity is used
     - "2.044sec_audio_len"
     - "libri_speech"
-  wandb_artifact_name: "nppc_inpainting_model"  # Single artifact for all checkpoints
+  wandb_artifact_name: "nppc_inpainting_model_mnist"  # Single artifact for all checkpoints
 
   nppc_latent_model_configuration:
     in_channels: 2
@@ -22,7 +24,7 @@ inpainting_nppc_training_configuration:
     pretrained_restoration_model_configuration:
       in_channels: 1
       out_channels: 1
-      dropout: 0.2
+      dropout: 0.0
 
     # Wandb configuration for loading the pretrained model
     wandb_config:
@@ -31,7 +33,9 @@ inpainting_nppc_training_configuration:
       artifact_name: "restoration_model"
       artifact_version: "latest"
 #      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
-      checkpoint_filename: "checkpoint_final_20250308_182244.pt"
+#      checkpoint_filename: "checkpoint_final_20250308_182244.pt"
+      checkpoint_filename: "checkpoint_final_20250422_135406.pt"
+
 
 
     audio_pc_wrapper_configuration:
@@ -42,7 +46,9 @@ inpainting_nppc_training_configuration:
     device: "cuda"
 
   data_configuration:
-    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
+#    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
+    clean_path: "../../../../../../../data/LibriSpeech/train-clean-360"
+
     sample_rate: 16000
     missing_spec_frames: 18
     missing_start_seconds: 0.4
@@ -55,7 +61,7 @@ inpainting_nppc_training_configuration:
     use_vad: True
 
   dataloader_configuration:
-    batch_size: 128
+    batch_size: 256
     shuffle: true
     num_workers: 16
     pin_memory: false
@@ -64,7 +70,7 @@ inpainting_nppc_training_configuration:
     type: "Adam"
     args:
       lr: 1.0e-4
-      betas: [0.5, 0.999]
+      betas: [0.9, 0.999]
 
 
 
