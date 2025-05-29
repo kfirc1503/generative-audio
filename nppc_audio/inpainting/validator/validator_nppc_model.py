@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pydantic
 from pathlib import Path
 from nppc_audio.inpainting.nppc.nppc_model import NPPCModel, NPPCModelConfig
-from utils import preprocess_log_magnitude, enable_dropout, compute_pca_and_importance_weights, calculate_unet_baseline
+from utils import calculate_unet_baseline
 import json
 import utils
 import numpy as np
