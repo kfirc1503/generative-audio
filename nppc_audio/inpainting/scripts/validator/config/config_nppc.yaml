@@ -18,15 +18,16 @@ model_validator_configuration:
       dropout: 0.2
 
 #    # Wandb configuration for loading the pretrained model
-    wandb_config:
-      entity: "kfirc-tel-aviv-university"
-      project: "generative-audio"
-      artifact_name: "restoration_model"
-#      artifact_version: "v3"
-      artifact_version: "latest"
-
-      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
-#      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
+#    wandb_config:
+#      entity: "kfirc-tel-aviv-university"
+#      project: "generative-audio"
+#      artifact_name: "restoration_model"
+##      artifact_version: "v3"
+#      artifact_version: "latest"
+#
+#      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
+##      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
+    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250215_163916.pt"
 
 
     #    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250130_221935.pt"
