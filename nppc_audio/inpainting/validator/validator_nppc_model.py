@@ -20,30 +20,18 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
                           sample_idx=None):
     """
     Plot pitch contours comparing clean audio with PC variations.
-    First subplot shows clean reference, followed by one subplot per PC direction.
-
-    Args:
-        audio_variations: Dictionary containing clean audio and PC variations
-        n_dirs: Number of PC directions to plot
-        sample_rate: Audio sample rate in Hz
-        save_dir: Directory to save individual plots (optional)
-        sample_idx: Sample index for directory naming (optional)
+    Creates a single figure with PC directions in a row and shared legend.
     """
-    # Create directory for individual pitch plots if save_dir is provided
-    if save_dir is not None and sample_idx is not None:
-        sample_dir = Path(save_dir) / f"sample_{sample_idx}" / "pitch_contours"
-        sample_dir.mkdir(parents=True, exist_ok=True)
+    if not audio_variations or 'clean' not in audio_variations:
+        print("Clean audio not found in audio_variations. Skipping pitch plot.")
+        return None
 
     # Get clean audio as reference
     clean_audio = audio_variations['clean']
-
-    # Create figure with n_dirs + 1 subplots (clean + PC variations)
-    fig, axes = plt.subplots(n_dirs + 1, 1, figsize=(15, 4 * (n_dirs + 1)))
-
-    # Calculate clean pitch contour once
     clean_np = clean_audio.squeeze().numpy()
     if clean_np.ndim > 1:
         clean_np = clean_np[0]
+
     f0_clean, voiced_flag_clean, _ = librosa.pyin(
         clean_np,
         fmin=80,
@@ -52,25 +40,40 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
     )
     times = librosa.times_like(f0_clean)
 
-    # Plot clean reference in first subplot
-    axes[0].plot(times, f0_clean, color='black', label='Clean', linewidth=2)
-    axes[0].set_title('Clean Audio Pitch Contour')
-    axes[0].set_ylabel('Frequency (Hz)')
-    axes[0].set_xlabel('Time (s)')
-    axes[0].grid(True)
-    axes[0].legend()
+    # Get unique PC numbers
+    pc_nums = sorted(list(set([int(k.split('pc')[1].split('_')[0]) for k in audio_variations.keys() if k.startswith('pc')])))
+    if not pc_nums:
+        print("No PC variations found.")
+        return None
+
+    n_pcs = min(3, len(pc_nums))  # Only take up to 3 PCs
+    pc_nums = pc_nums[:n_pcs]
+
+    # Create figure with subplots in a row
+    fig, axes = plt.subplots(1, n_pcs, figsize=(5*n_pcs, 4))  # Slightly reduced width per subplot
+    if n_pcs == 1:
+        axes = [axes]
 
     # Create colormap for alpha variations
     unique_alphas = sorted(set(float(k.split('alpha')[-1]) for k in audio_variations.keys() if 'alpha' in k))
     colors = plt.cm.viridis(np.linspace(0, 1, len(unique_alphas)))
+    legend_alphas = unique_alphas[::2]  # Only use every other alpha for legend
+
+    # Store lines for legend
+    legend_lines = []
+    legend_labels = []
+
+    # First line will be clean audio (black)
+    clean_line = axes[0].plot(times, f0_clean, color='black', linewidth=2)[0]
+    legend_lines.append(clean_line)
+    legend_labels.append('Clean')
 
     # Plot each PC direction
-    for i in range(n_dirs):
-        pc_num = i + 1
-        ax = axes[i + 1]  # +1 because first subplot is clean reference
-
+    for i, pc_num in enumerate(pc_nums):
+        ax = axes[i]
+        
         # Plot clean reference
-        ax.plot(times, f0_clean, color='black', label='Clean', linewidth=2)
+        ax.plot(times, f0_clean, color='black', linewidth=2)
 
         # Plot each alpha variation for this PC
         for alpha_idx, alpha in enumerate(unique_alphas):
@@ -88,71 +91,35 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
                     sr=sample_rate
                 )
 
-                ax.plot(times, f0, color=colors[alpha_idx],
-                        label=f'α={alpha:.1f}', alpha=0.7)
+                line = ax.plot(times, f0, color=colors[alpha_idx], alpha=0.7, linewidth=2)[0]
+                
+                # Only add to legend from first subplot and if alpha is in legend_alphas
+                if i == 0 and alpha in legend_alphas:
+                    legend_lines.append(line)
+                    legend_labels.append(f'α={alpha:.1f}')
 
-        ax.set_title(f'PC Direction {pc_num} Pitch Contours')
-        ax.set_ylabel('Frequency (Hz)')
-        ax.set_xlabel('Time (s)')
+        ax.set_title(f'PC {pc_num}', fontsize=14)
+        ax.set_ylabel('Frequency (Hz)' if i == 0 else '', fontsize=12)
+        ax.set_xlabel('Time (s)', fontsize=12)
         ax.grid(True)
-        # ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=16)
+        ax.tick_params(labelsize=10)
 
-        # Save individual PC plot if save_dir is provided
-        if save_dir is not None:
-            fig_pc = plt.figure(figsize=(15, 4))  # Changed from (15, 4)
-            ax_pc = fig_pc.add_subplot(111)
+    # Add single legend outside plots
+    fig.legend(legend_lines, legend_labels, 
+              loc='center right',
+              bbox_to_anchor=(1.01, 0.5),  # Reduced spacing between plots and legend
+              fontsize=12)
 
-            # Plot clean reference
-            ax_pc.plot(times, f0_clean, color='black', label='Clean', linewidth=2)
-
-            # Plot all alpha variations for this PC
-            legend_alphas = unique_alphas[::2]
-            # legend_alphas = unique_alphas
-            # First plot all lines without labels
-            for alpha_idx, alpha in enumerate(unique_alphas):
-                variation_key = f'pc{pc_num}_alpha{alpha:.1f}'
-                if variation_key in audio_variations:
-                    audio = audio_variations[variation_key]
-                    audio_np = audio.squeeze().numpy()
-                    if audio_np.ndim > 1:
-                        audio_np = audio_np[0]
-
-                    f0, voiced_flag, _ = librosa.pyin(
-                        audio_np,
-                        fmin=80,
-                        fmax=400,
-                        sr=sample_rate
-                    )
-
-                    # Use _nolegend_ for alphas we don't want in legend
-                    if alpha in legend_alphas:
-                        label = f'α={alpha:.1f}'
-                    else:
-                        label = '_nolegend_'
-
-                    ax_pc.plot(times, f0, color=colors[alpha_idx],
-                               label=label, alpha=0.7)
-
-            # Set empty title and larger fonts
-            ax_pc.set_title('')
-            ax_pc.set_ylabel('Frequency (Hz)', fontsize=20)
-            ax_pc.set_xlabel('Time (s)', fontsize=20)
-            ax_pc.tick_params(axis='both', labelsize=18)
-            ax_pc.grid(True)
-
-            # # Add legend on the right side
-            # ax_pc.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
-            ax_pc.legend(bbox_to_anchor=(1.02, 1), loc='upper left',fontsize=16)
-
-            # Adjust the plot to fill the figure properly
-            plt.subplots_adjust(right=0.85, top=0.98, bottom=0.15, left=0.1)
-
-            # Save figure
-            fig_pc.savefig(sample_dir / f'pc_{pc_num}_pitch.png', bbox_inches='tight')
-            plt.close(fig_pc)
-
+    # Adjust layout to make room for legend while keeping plots tight
     plt.tight_layout()
+    plt.subplots_adjust(right=0.90, wspace=0.15)  # Adjusted right margin and reduced space between subplots
+
+    # Save if directory provided
+    if save_dir is not None:
+        save_path = Path(save_dir) / f"sample_{sample_idx}" / "pitch_contours"
+        save_path.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path / 'pitch_comparison.png', bbox_inches='tight', dpi=300)
+
     return fig
 
 
@@ -655,7 +622,6 @@ def save_pc_audio_variations(clean_spec_mag_norm_log, pred_spec_mag, pc_directio
     # Generate and save pitch analysis
     n_dirs = pc_directions_mag.shape[1]
     pitch_fig = plot_pitch_comparison(audio_variations, n_dirs, sample_rate, pitch_save_path, sample_idx)
-    pitch_fig.savefig(sample_dir / f"pitch_comparison.png")
     plt.close(pitch_fig)
 
     return {'transcriptions': transcriptions, 'phonemes': phonemes}

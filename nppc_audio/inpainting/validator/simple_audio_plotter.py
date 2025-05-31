@@ -7,33 +7,20 @@ import utils
 import librosa
 
 def load_audio_from_folder(sample_folder, sample_rate=16000):
-    """Load full audio files and cut to a specific segment."""
+    """Load audio files (non-full versions) and calculate pitch."""
     audio_data = {}
-    segment_start_sec = 0.4
-    segment_duration_sec = 2.044
-
-    # Load clean audio (full version)
-    clean_path = sample_folder / "clean_full.wav"
+    
+    # Load clean audio (non-full version)
+    clean_path = sample_folder / "clean.wav"
     if clean_path.exists():
         audio, sr = torchaudio.load(clean_path)
         if sr != sample_rate:
             audio = torchaudio.functional.resample(audio, sr, sample_rate)
-        
-        start_sample = int(segment_start_sec * sample_rate)
-        end_sample = start_sample + int(segment_duration_sec * sample_rate)
-        
-        # Ensure the segment is within audio bounds
-        if start_sample < audio.shape[1] and end_sample <= audio.shape[1]:
-            audio_data['clean'] = audio.squeeze(0)[start_sample:end_sample]
-        elif start_sample < audio.shape[1]: # if segment goes beyond audio length, take what's available
-            audio_data['clean'] = audio.squeeze(0)[start_sample:]
-        else:
-            print(f"Warning: Start time {segment_start_sec}s is beyond the duration of clean audio {clean_path}. Skipping clean audio.")
-
+        audio_data['clean'] = audio.squeeze(0)
     else:
         print(f"Warning: {clean_path} not found.")
     
-    # Load PC variations (full versions)
+    # Load PC variations (non-full versions)
     pc_dirs = []
     for d in sample_folder.iterdir():
         if d.is_dir() and d.name.startswith('pc_'):
@@ -46,36 +33,26 @@ def load_audio_from_folder(sample_folder, sample_rate=16000):
                 continue
     
     # Sort by PC number
-    pc_dirs.sort()  # This will sort based on the pc_num in the tuple
+    pc_dirs.sort()
     
-    for _, pc_dir in pc_dirs:  # We only need the directory path now
+    for _, pc_dir in pc_dirs:
         alpha_files = sorted([
             f for f in pc_dir.iterdir() 
-            if f.is_file() and f.suffix == '.wav' and '_full' in f.stem
+            if f.is_file() and f.suffix == '.wav' and '_full' not in f.stem
         ])
         
         for alpha_file in alpha_files:
-            alpha_str = alpha_file.stem.replace('alpha_', '').replace('_full', '')
+            alpha_str = alpha_file.stem.replace('alpha_', '')
             try:
                 alpha_val = float(alpha_str)
                 audio, sr = torchaudio.load(alpha_file)
                 if sr != sample_rate:
                     audio = torchaudio.functional.resample(audio, sr, sample_rate)
 
-                start_sample = int(segment_start_sec * sample_rate)
-                end_sample = start_sample + int(segment_duration_sec * sample_rate)
-
                 # Use the clean pc_num from our earlier parsing
                 pc_num = int(pc_dir.name.split('_')[1].split()[0].split('-')[0])
                 key = f'pc{pc_num}_alpha{alpha_val:.1f}'
-                
-                if start_sample < audio.shape[1] and end_sample <= audio.shape[1]:
-                    audio_data[key] = audio.squeeze(0)[start_sample:end_sample]
-                elif start_sample < audio.shape[1]:
-                    audio_data[key] = audio.squeeze(0)[start_sample:]
-                else:
-                    print(f"Warning: Start time {segment_start_sec}s is beyond the duration of {alpha_file.name}. Skipping this variation.")
-                    continue
+                audio_data[key] = audio.squeeze(0)
             except ValueError:
                 print(f"Could not parse alpha value from {alpha_file.name}, skipping.")
                 continue
@@ -98,8 +75,8 @@ def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, save
     
     f0_clean, _, _ = librosa.pyin(
         clean_np,
-        fmin=librosa.note_to_hz('C2'),
-        fmax=librosa.note_to_hz('C7'),
+        fmin=80,
+        fmax=400,
         sr=sample_rate
     )
     times = librosa.times_like(f0_clean)
@@ -115,9 +92,9 @@ def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, save
 
     # Create figure with subplots
     n_pcs = len(pc_nums)
-    fig, axes = plt.subplots(1, n_pcs, figsize=(6*n_pcs, 4))  # Changed to 1 row, n_pcs columns
+    fig, axes = plt.subplots(1, n_pcs, figsize=(5*n_pcs, 4))
     if n_pcs == 1:
-        axes = [axes]  # Make it iterable for single subplot case
+        axes = [axes]
 
     # Store lines for legend
     legend_lines = []
@@ -146,8 +123,8 @@ def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, save
 
                 f0, _, _ = librosa.pyin(
                     audio_np,
-                    fmin=librosa.note_to_hz('C2'),
-                    fmax=librosa.note_to_hz('C7'),
+                    fmin=80,
+                    fmax=400,
                     sr=sample_rate
                 )
                 line = ax.plot(times, f0, color=colors[alpha_idx], alpha=0.7, linewidth=2)[0]
@@ -158,7 +135,7 @@ def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, save
                     legend_labels.append(f'α={alpha:.1f}')
 
         ax.set_title(f'PC {pc_num}', fontsize=14)
-        ax.set_ylabel('Frequency (Hz)' if idx == 0 else '', fontsize=12)  # Only show ylabel on first subplot
+        ax.set_ylabel('Frequency (Hz)' if idx == 0 else '', fontsize=12)
         ax.set_xlabel('Time (s)', fontsize=12)
         ax.grid(True)
         ax.tick_params(labelsize=10)
@@ -166,12 +143,12 @@ def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, save
     # Add single legend outside plots
     fig.legend(legend_lines, legend_labels, 
               loc='center right', 
-              bbox_to_anchor=(1.08, 0.5),
+              bbox_to_anchor=(1.01, 0.5),  # Reduced spacing between plots and legend
               fontsize=12)
 
-    # Adjust layout to make room for legend
+    # Adjust layout to make room for legend while keeping plots tight
     plt.tight_layout()
-    plt.subplots_adjust(right=0.85)
+    plt.subplots_adjust(right=0.90, wspace=0.15)  # Adjusted right margin and reduced space between subplots
 
     # Save if directory provided
     if save_dir is not None:
