@@ -95,7 +95,8 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
         ax.set_ylabel('Frequency (Hz)')
         ax.set_xlabel('Time (s)')
         ax.grid(True)
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        # ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=16)
 
         # Save individual PC plot if save_dir is provided
         if save_dir is not None:
@@ -141,7 +142,8 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
             ax_pc.grid(True)
 
             # # Add legend on the right side
-            ax_pc.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+            # ax_pc.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+            ax_pc.legend(bbox_to_anchor=(1.02, 1), loc='upper left',fontsize=16)
 
             # Adjust the plot to fill the figure properly
             plt.subplots_adjust(right=0.85, top=0.98, bottom=0.15, left=0.1)

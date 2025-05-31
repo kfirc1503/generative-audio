@@ -4,28 +4,51 @@ import numpy as np
 import torchaudio
 from pathlib import Path
 import utils
+import librosa
 
 def load_audio_from_folder(sample_folder, sample_rate=16000):
-    """Load full audio files and cut to first 2 seconds"""
+    """Load full audio files and cut to a specific segment."""
     audio_data = {}
-    
+    segment_start_sec = 0.4
+    segment_duration_sec = 2.044
+
     # Load clean audio (full version)
     clean_path = sample_folder / "clean_full.wav"
     if clean_path.exists():
         audio, sr = torchaudio.load(clean_path)
         if sr != sample_rate:
             audio = torchaudio.functional.resample(audio, sr, sample_rate)
-        # Cut to first 2 seconds
-        samples_to_keep = 2 * sample_rate
-        audio_data['clean'] = audio.squeeze(0)[:samples_to_keep]
+        
+        start_sample = int(segment_start_sec * sample_rate)
+        end_sample = start_sample + int(segment_duration_sec * sample_rate)
+        
+        # Ensure the segment is within audio bounds
+        if start_sample < audio.shape[1] and end_sample <= audio.shape[1]:
+            audio_data['clean'] = audio.squeeze(0)[start_sample:end_sample]
+        elif start_sample < audio.shape[1]: # if segment goes beyond audio length, take what's available
+            audio_data['clean'] = audio.squeeze(0)[start_sample:]
+        else:
+            print(f"Warning: Start time {segment_start_sec}s is beyond the duration of clean audio {clean_path}. Skipping clean audio.")
+
     else:
         print(f"Warning: {clean_path} not found.")
     
     # Load PC variations (full versions)
-    pc_dirs = sorted([d for d in sample_folder.iterdir() if d.is_dir() and d.name.startswith('pc_')])
+    pc_dirs = []
+    for d in sample_folder.iterdir():
+        if d.is_dir() and d.name.startswith('pc_'):
+            try:
+                # Extract PC number, ignoring any additional text
+                pc_num = int(d.name.split('_')[1].split()[0].split('-')[0])
+                pc_dirs.append((pc_num, d))
+            except (IndexError, ValueError):
+                print(f"Warning: Skipping malformed PC directory: {d.name}")
+                continue
     
-    for pc_dir in pc_dirs:
-        pc_num = pc_dir.name.split('_')[1]
+    # Sort by PC number
+    pc_dirs.sort()  # This will sort based on the pc_num in the tuple
+    
+    for _, pc_dir in pc_dirs:  # We only need the directory path now
         alpha_files = sorted([
             f for f in pc_dir.iterdir() 
             if f.is_file() and f.suffix == '.wav' and '_full' in f.stem
@@ -38,117 +61,125 @@ def load_audio_from_folder(sample_folder, sample_rate=16000):
                 audio, sr = torchaudio.load(alpha_file)
                 if sr != sample_rate:
                     audio = torchaudio.functional.resample(audio, sr, sample_rate)
-                # Cut to first 2 seconds
-                samples_to_keep = 2 * sample_rate
+
+                start_sample = int(segment_start_sec * sample_rate)
+                end_sample = start_sample + int(segment_duration_sec * sample_rate)
+
+                # Use the clean pc_num from our earlier parsing
+                pc_num = int(pc_dir.name.split('_')[1].split()[0].split('-')[0])
                 key = f'pc{pc_num}_alpha{alpha_val:.1f}'
-                audio_data[key] = audio.squeeze(0)[:samples_to_keep]
+                
+                if start_sample < audio.shape[1] and end_sample <= audio.shape[1]:
+                    audio_data[key] = audio.squeeze(0)[start_sample:end_sample]
+                elif start_sample < audio.shape[1]:
+                    audio_data[key] = audio.squeeze(0)[start_sample:]
+                else:
+                    print(f"Warning: Start time {segment_start_sec}s is beyond the duration of {alpha_file.name}. Skipping this variation.")
+                    continue
             except ValueError:
                 print(f"Could not parse alpha value from {alpha_file.name}, skipping.")
                 continue
     
     return audio_data
 
-def calculate_spectrogram(audio, n_fft=255, hop_length=128):
-    """Calculate spectrogram with consistent parameters"""
-    window = torch.hann_window(n_fft)
-    spec = torch.stft(audio, 
-                     n_fft=n_fft, 
-                     hop_length=hop_length,
-                     win_length=n_fft,
-                     window=window,
-                     return_complex=False)  # Returns [F, T, 2]
-    
-    # Calculate magnitude spectrogram in dB scale
-    mag = torch.sqrt(spec[..., 0]**2 + spec[..., 1]**2)
-    mag_db = torch.log10(mag + 1e-6)
-    return mag_db
+def plot_pitch_comparison(audio_variations: dict, sample_rate: int = 16000, save_dir=None, sample_idx=None):
+    """
+    Plot pitch contours for each PC direction in subplots with a single shared legend.
+    """
+    if not audio_variations or 'clean' not in audio_variations:
+        print("Clean audio not found in audio_variations. Skipping pitch plot.")
+        return None
 
-def plot_spectrograms(audio_data, sample_output, n_dirs=3):
-    """Plot spectrograms for all audio variations with consistent scale"""
-    sample_rate = 16000
-    n_fft = 255
-    hop_length = 128
+    # Get clean audio and calculate its pitch
+    clean_audio = audio_variations['clean']
+    clean_np = clean_audio.squeeze().numpy()
+    if clean_np.ndim > 1:
+        clean_np = clean_np[0]
     
-    # Calculate spectrograms for all audio files
-    specs = {}
-    for key, audio in audio_data.items():
-        specs[key] = calculate_spectrogram(audio, n_fft, hop_length)
-    
-    # Create directory for spectrograms
-    spec_dir = sample_output / 'spectrograms'
-    spec_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Calculate frame indices for the focused region
-    center_frame = int(1.0 * sample_rate / hop_length)  # Frame at 1 second
-    mask_frames = 18  # Number of frames in masked region
-    
-    # Calculate mask boundaries
-    mask_start_frame = center_frame - mask_frames//2
-    mask_end_frame = center_frame + (mask_frames - mask_frames//2)
-    
-    # Calculate context window (same duration as mask on each side)
-    mask_duration = mask_end_frame - mask_start_frame
-    context_start_frame = max(0, mask_start_frame - mask_duration)
-    context_end_frame = min(specs['clean'].shape[1], mask_end_frame + mask_duration)
-    
-    # Calculate time values for x-axis
-    time_per_frame = hop_length / sample_rate
-    plot_start_time = context_start_frame * time_per_frame
-    plot_end_time = context_end_frame * time_per_frame
-    
-    # Calculate frequency values for y-axis
-    freqs = np.linspace(0, sample_rate/2, specs['clean'].shape[0])
-    
-    # Plot clean spectrogram
-    if 'clean' in specs:
-        plt.figure(figsize=(10, 6))
-        plt.imshow(specs['clean'][:, context_start_frame:context_end_frame], 
-                  origin='lower', aspect='auto',
-                  vmin=-3, vmax=3,
-                  extent=[plot_start_time, plot_end_time, freqs[0]/1000, freqs[-1]/1000])
+    f0_clean, _, _ = librosa.pyin(
+        clean_np,
+        fmin=librosa.note_to_hz('C2'),
+        fmax=librosa.note_to_hz('C7'),
+        sr=sample_rate
+    )
+    times = librosa.times_like(f0_clean)
+
+    # Get unique PC numbers and alphas
+    pc_nums = sorted(list(set([int(k.split('pc')[1].split('_')[0]) for k in audio_variations.keys() if k.startswith('pc')])))
+    if not pc_nums:
+        print("No PC variations found.")
+        return None
+
+    alphas = sorted(list(set([float(k.split('alpha')[1]) for k in audio_variations.keys() if 'alpha' in k])))
+    colors = plt.cm.viridis(np.linspace(0, 1, len(alphas)))
+
+    # Create figure with subplots
+    n_pcs = len(pc_nums)
+    fig, axes = plt.subplots(1, n_pcs, figsize=(6*n_pcs, 4))  # Changed to 1 row, n_pcs columns
+    if n_pcs == 1:
+        axes = [axes]  # Make it iterable for single subplot case
+
+    # Store lines for legend
+    legend_lines = []
+    legend_labels = []
+
+    # First line will be clean audio (black)
+    clean_line = axes[0].plot(times, f0_clean, color='black', linewidth=2)[0]
+    legend_lines.append(clean_line)
+    legend_labels.append('Clean')
+
+    # Plot each PC direction
+    for idx, pc_num in enumerate(pc_nums):
+        ax = axes[idx]
         
-        # Add mask boundary lines
-        mask_start_time = mask_start_frame * time_per_frame
-        mask_end_time = mask_end_frame * time_per_frame
-        plt.axvline(x=mask_start_time, color='r', linestyle='--', alpha=0.5)
-        plt.axvline(x=mask_end_time, color='r', linestyle='--', alpha=0.5)
+        # Plot clean reference (black)
+        ax.plot(times, f0_clean, color='black', linewidth=2)
         
-        plt.colorbar(label='Log Magnitude (Normalized)')
-        plt.title('Clean Audio Spectrogram')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Frequency (kHz)')
-        plt.savefig(spec_dir / 'clean_spec.png')
-        plt.close()
-    
-    # Plot PC variations
-    for i in range(n_dirs):
-        pc_num = i + 1
-        # Get all variations for this PC
-        pc_specs = {k: v for k, v in specs.items() if f'pc{pc_num}_' in k}
-        
-        if pc_specs:
-            n_variations = len(pc_specs)
-            fig, axes = plt.subplots(1, n_variations, figsize=(5*n_variations, 5))
-            
-            for idx, (key, spec) in enumerate(sorted(pc_specs.items())):
-                im = axes[idx].imshow(spec[:, context_start_frame:context_end_frame], 
-                                    origin='lower', aspect='auto',
-                                    vmin=-3, vmax=3,
-                                    extent=[plot_start_time, plot_end_time, freqs[0]/1000, freqs[-1]/1000])
+        # Plot variations
+        for alpha_idx, alpha in enumerate(alphas):
+            key = f'pc{pc_num}_alpha{alpha:.1f}'
+            if key in audio_variations:
+                audio = audio_variations[key]
+                audio_np = audio.squeeze().numpy()
+                if audio_np.ndim > 1:
+                    audio_np = audio_np[0]
+
+                f0, _, _ = librosa.pyin(
+                    audio_np,
+                    fmin=librosa.note_to_hz('C2'),
+                    fmax=librosa.note_to_hz('C7'),
+                    sr=sample_rate
+                )
+                line = ax.plot(times, f0, color=colors[alpha_idx], alpha=0.7, linewidth=2)[0]
                 
-                # Add mask boundary lines
-                axes[idx].axvline(x=mask_start_time, color='r', linestyle='--', alpha=0.5)
-                axes[idx].axvline(x=mask_end_time, color='r', linestyle='--', alpha=0.5)
-                
-                axes[idx].set_title(key)
-                axes[idx].set_xlabel('Time (s)')
+                # Only add to legend from first subplot
                 if idx == 0:
-                    axes[idx].set_ylabel('Frequency (kHz)')
-                plt.colorbar(im, ax=axes[idx], label='Log Magnitude (Normalized)')
-            
-            plt.tight_layout()
-            plt.savefig(spec_dir / f'pc{pc_num}_variations.png')
-            plt.close()
+                    legend_lines.append(line)
+                    legend_labels.append(f'α={alpha:.1f}')
+
+        ax.set_title(f'PC {pc_num}', fontsize=14)
+        ax.set_ylabel('Frequency (Hz)' if idx == 0 else '', fontsize=12)  # Only show ylabel on first subplot
+        ax.set_xlabel('Time (s)', fontsize=12)
+        ax.grid(True)
+        ax.tick_params(labelsize=10)
+
+    # Add single legend outside plots
+    fig.legend(legend_lines, legend_labels, 
+              loc='center right', 
+              bbox_to_anchor=(1.08, 0.5),
+              fontsize=12)
+
+    # Adjust layout to make room for legend
+    plt.tight_layout()
+    plt.subplots_adjust(right=0.85)
+
+    # Save if directory provided
+    if save_dir is not None:
+        save_path = Path(save_dir) / f"sample_{sample_idx}" / "pitch_contours"
+        save_path.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path / f'pitch_comparison.png', bbox_inches='tight', dpi=300)
+
+    return fig
 
 def process_sample(sample_folder, output_dir):
     """Process a single sample folder"""
@@ -165,8 +196,14 @@ def process_sample(sample_folder, output_dir):
     sample_output = output_dir / sample_name
     sample_output.mkdir(parents=True, exist_ok=True)
     
-    # Plot spectrograms
-    plot_spectrograms(audio_data, sample_output)
+    # Plot pitch comparison
+    # Pass sample_name as sample_idx for directory naming inside plot_pitch_comparison
+    pitch_fig = plot_pitch_comparison(audio_data, sample_rate=16000, save_dir=output_dir, sample_idx=sample_name)
+    if pitch_fig:
+        # If you want to save the main combined plot from process_sample as well:
+        # main_pitch_plot_path = sample_output / "overall_pitch_comparison.png"
+        # pitch_fig.savefig(main_pitch_plot_path)
+        plt.close(pitch_fig) # Close the figure after saving or if not needed further
     
     print(f"Completed {sample_name}")
 
