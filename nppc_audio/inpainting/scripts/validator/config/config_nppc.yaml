@@ -27,7 +27,8 @@ model_validator_configuration:
 #
 #      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
 ##      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
-    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250215_163916.pt"
+#    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250215_163916.pt"
+    pretrained_restoration_model_path: "./checkpoint_final_20250215_163916.pt"
 
 
     #    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250130_221935.pt"
@@ -39,7 +40,7 @@ model_validator_configuration:
 
 # Data configuration
 data_configuration:
-  clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/test-clean"
+  clean_path: "../../../../../../../data/LibriSpeech/test-clean"
   sample_rate: 16000
   missing_length_seconds: 0.128
 #  missing_spec_frames: 18

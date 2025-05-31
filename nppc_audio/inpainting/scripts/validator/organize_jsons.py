@@ -26,24 +26,24 @@ def load_all_data(folder_path):
             mc_rmse = data["mc_dropout"]["rmse"]
             mc_res = data["mc_dropout"]["residual_error"]
 
-            # Append rows with normal math expressions
+            # Append rows with simplified labels
             rows.append({
-                "metric": r"$\|\mathbf{x} - \hat{\mathbf{x}}\|_2$",
+                "metric": "Reconstruction Error",
                 "method": "NPPC",
                 "value": nppc_rmse
             })
             rows.append({
-                "metric": r"$\|\mathbf{e} - \mathbf{W}\mathbf{W}^T\mathbf{e}\|_2$",
+                "metric": "Residual Error",
                 "method": "NPPC",
                 "value": nppc_res
             })
             rows.append({
-                "metric": r"$\|\mathbf{x} - \hat{\mathbf{x}}\|_2$",
+                "metric": "Reconstruction Error",
                 "method": "MC Dropout",
                 "value": mc_rmse
             })
             rows.append({
-                "metric": r"$\|\mathbf{e} - \mathbf{W}\mathbf{W}^T\mathbf{e}\|_2$",
+                "metric": "Residual Error",
                 "method": "MC Dropout",
                 "value": mc_res
             })
@@ -79,14 +79,18 @@ def plot_grouped_bars(df, save_path="figures/metrics_comparison.png"):
         palette=colors
     )
 
-    # Remove title and labels
+    # Set labels
     ax.set_title("")
-    ax.set_ylabel("")
+    ax.set_ylabel("Error", fontsize=20, fontweight='bold')
+    # ax.set_ylabel("Error", fontsize=20)
+
     ax.set_xlabel("")
 
-    # Increase x-axis tick label size
-    ax.tick_params(axis='x', labelsize=25)  # Increased size for x-axis labels
-    ax.tick_params(axis='y', labelsize=12)  # Normal size for y-axis
+    # Increase tick label sizes
+    ax.tick_params(axis='x', labelsize=20)  # x-axis labels (increased)
+    ax.tick_params(axis='y', labelsize=18)  # y-axis labels (increased)
+
+    ax.set_xticklabels(ax.get_xticklabels(), fontweight='bold')
 
 
     # Legend in bottom-right corner
@@ -94,7 +98,6 @@ def plot_grouped_bars(df, save_path="figures/metrics_comparison.png"):
 
     # Adjust layout
     plt.tight_layout()
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=25, fontweight='bold')
 
     # Save the figure
     plt.savefig(save_path, dpi=300, bbox_inches='tight', format='png')
