@@ -50,7 +50,7 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
     pc_nums = pc_nums[:n_pcs]
 
     # Create figure with subplots in a row
-    fig, axes = plt.subplots(1, n_pcs, figsize=(5*n_pcs, 4))  # Slightly reduced width per subplot
+    fig, axes = plt.subplots(1, n_pcs, figsize=(5*n_pcs, 3.5))  # Changed height from 4 to 3.5
     if n_pcs == 1:
         axes = [axes]
 
@@ -108,7 +108,7 @@ def plot_pitch_comparison(audio_variations: dict, n_dirs: int = 5, sample_rate: 
     fig.legend(legend_lines, legend_labels, 
               loc='center right',
               bbox_to_anchor=(1.01, 0.5),  # Reduced spacing between plots and legend
-              fontsize=12)
+              fontsize=16)
 
     # Adjust layout to make room for legend while keeping plots tight
     plt.tight_layout()
