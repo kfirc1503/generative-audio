@@ -13,7 +13,7 @@ inpainting_nppc_training_configuration:
     - "use_vad"              # voice activity is used
     - "2.044sec_audio_len"
     - "libri_speech"
-  wandb_artifact_name: "nppc_inpainting_model_mnist"  # Single artifact for all checkpoints
+  wandb_artifact_name: "nppc_inpainting_model"  # Single artifact for all checkpoints
 
   nppc_latent_model_configuration:
     in_channels: 2
@@ -31,10 +31,12 @@ inpainting_nppc_training_configuration:
       entity: "kfirc-tel-aviv-university"
       project: "generative-audio"
       artifact_name: "restoration_model"
-      artifact_version: "latest"
+#      artifact_version: "latest"
+      artifact_version: "v6"
+
 #      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
-#      checkpoint_filename: "checkpoint_final_20250308_182244.pt"
-      checkpoint_filename: "checkpoint_final_20250422_135406.pt"
+      checkpoint_filename: "checkpoint_final_20250312_000509.pt"
+#      checkpoint_filename: "checkpoint_final_20250422_135406.pt"
 
 
 

@@ -72,34 +72,34 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         self.nppc_latent_model.train()
         # create data loader:
         # dataset = AudioInpaintingDataset(config.data_configuration)
-        mask = torch.zeros((1, 28, 28)).to(self.device)
-        mask[:, :20, :] = 1.
-        # mask = 1 - mask
-        self.mask = mask
+        # mask = torch.zeros((1, 28, 28)).to(self.device)
+        # mask[:, :20, :] = 1.
+        # # mask = 1 - mask
+        # self.mask = mask
 
 
         dataset = AudioInpaintingDataset(config.data_configuration)
-        train_set = torchvision.datasets.MNIST(root='./', download=True, train=True,
-                                               transform=torchvision.transforms.ToTensor())
-
-        dataloader = torch.utils.data.DataLoader(
-            train_set,
-            batch_size=config.dataloader_configuration.batch_size,
-            shuffle=True,
-        )
+        # train_set = torchvision.datasets.MNIST(root='./', download=True, train=True,
+        #                                        transform=torchvision.transforms.ToTensor())
+        #
+        # dataloader = torch.utils.data.DataLoader(
+        #     train_set,
+        #     batch_size=config.dataloader_configuration.batch_size,
+        #     shuffle=True,
+        # )
 
         print(f"Total sample pairs in dataset: {len(dataset)}")
 
         # Create dataloader
-        # dataloader = torch.utils.data.DataLoader(
-        #     dataset,
-        #     batch_size=config.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
-        #     shuffle=config.dataloader_configuration.shuffle,
-        #     num_workers=config.dataloader_configuration.num_workers,
-        #     pin_memory=config.dataloader_configuration.pin_memory,
-        #     collate_fn=utils.collate_fn
-        #
-        # )
+        dataloader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=config.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
+            shuffle=config.dataloader_configuration.shuffle,
+            num_workers=config.dataloader_configuration.num_workers,
+            pin_memory=config.dataloader_configuration.pin_memory,
+            collate_fn=utils.collate_fn
+
+        )
         self.dataloader = dataloader
 
         self.step = 0
@@ -163,20 +163,21 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         for batch in pbar:
             # Move batch to device
             # Unpack batch including metadata
-            # masked_spec, mask_frames, clean_spec, masked_audio, metadata = batch
-            #
-            # # Move tensors to device
-            # masked_spec = masked_spec.to(self.device)
-            # mask_frames = mask_frames.to(self.device)
-            # clean_spec = clean_spec.to(self.device)
-            #
-            # batch = (masked_spec, mask_frames, clean_spec)
-            images,labels = batch
-            images = images.to(self.device)
-            labels = labels.to(self.device)
+            masked_spec, mask_frames, clean_spec, masked_audio, metadata = batch
+
+            # Move tensors to device
+            masked_spec = masked_spec.to(self.device)
+            mask_frames = mask_frames.to(self.device)
+            clean_spec = clean_spec.to(self.device)
+
+            batch = (masked_spec, mask_frames, clean_spec)
+            # images,labels = batch
+            # images = images.to(self.device)
+            # labels = labels.to(self.device)
             # Forward and backward pass
             # reconst_err, objective, log_dict = self.base_step((images, labels))
-            reconst_err, objective, log_dict = self.latent_space_nppc_mnist_step((images, labels))
+            # reconst_err, objective, log_dict = self.latent_space_nppc_mnist_step((images, labels))
+            reconst_err, objective, log_dict = self.latent_space_nppc_step(batch)
 
             self.optimizer.zero_grad()
             objective.backward()
@@ -489,10 +490,11 @@ class NPPCAudioInpaintingTrainer(nn.Module):
         clean_spec_norm_log, mask, masked_spec_norm_log = utils.preprocess_data(clean_spec, masked_spec, mask)
         pred_spec_mag_norm_log = self.nppc_model.get_pred_spec_mag_norm(masked_spec_norm_log, mask)
 
+
         # Step 2: Encoding into latent space
         with torch.no_grad():
             latent_clean , _ = self.nppc_model.pretrained_restoration_model.net.encoder(clean_spec_norm_log)
-            latent_pred , _  = self.nppc_model.pretrained_restoration_model.net.encoder(masked_spec_norm_log)
+            latent_pred , _  = self.nppc_model.pretrained_restoration_model.net.encoder(pred_spec_mag_norm_log)
 
         # Step 3: Latent Error computation
         latent_err = latent_clean - latent_pred
@@ -505,8 +507,17 @@ class NPPCAudioInpaintingTrainer(nn.Module):
             dim=1
         )
 
-        w_latent = self.nppc_latent_model(masked_with_pred_spec_mag_norm)
+        w_latent, latent_mask = self.nppc_latent_model(masked_with_pred_spec_mag_norm, mask)
+
+        latent_mask_flat = latent_mask.flatten(start_dim=1)  # [B, latent_features]
+        latent_err_flat = latent_err_flat * latent_mask_flat
+
+        latent_mask_flat_expanded = latent_mask_flat.unsqueeze(1)
+        latent_mask_flat_broadcasted = latent_mask_flat_expanded.expand(-1, w_latent.shape[1], -1)
+
         w_latent_flat = w_latent.flatten(start_dim=2)  # [B, n_dirs, latent_features]
+        w_latent_flat = w_latent_flat * latent_mask_flat_broadcasted
+
 
         # Step 5: Gram-Schmidt normalization (latent space)
         # still not implemented
