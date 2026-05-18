@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /storage/ 2>/dev/null | head -50)",
+      "Read(//storage/**)",
+      "Bash(awk '{print $9}')",
+      "Bash(grep -v '^$\\\\|^\\\\.\\\\|^\\\\.\\\\.$')",
+      "WebFetch(domain:zenodo.org)",
+      "Bash(mkdir -p /storage/kfir/repos/generative-audio-workspace/audio_and_video && mkdir -p /storage/kfir/data/audio_and_video && ls -la /storage/kfir/data/ /storage/kfir/repos/generative-audio-workspace/audio_and_video/)",
+      "Bash(python -c \"import requests, tqdm; print\\('deps ok'\\)\")",
+      "Bash(python download_grid_corpus.py --list)",
+      "Bash(mkdir -p /root/.claude/projects/-storage-kfir-repos-generative-audio-workspace/memory && ls /root/.claude/projects/-storage-kfir-repos-generative-audio-workspace/memory/)",
+      "Bash(curl -sL -o /storage/kfir/repos/generative-audio-workspace/audio_and_video/papers/morrone2020_av_speech_inpainting.pdf https://arxiv.org/pdf/2010.04556v2)",
+      "Bash(xxd)",
+      "Bash(python -c \"p='/storage/kfir/repos/generative-audio-workspace/audio_and_video/papers/morrone2020_av_speech_inpainting.pdf'; b=open\\(p,'rb'\\).read\\(8\\); print\\(b\\)\")",
+      "Bash(python download_grid_corpus.py --only jasagrid.pdf)",
+      "Bash(python -c \"p='/storage/kfir/data/audio_and_video/grid_corpus/jasagrid.pdf'; b=open\\(p,'rb'\\).read\\(8\\); print\\('header:', b\\)\")",
+      "Bash(python -c \"import sys; print\\('executable:', sys.executable\\); print\\('prefix:', sys.prefix\\); print\\('base_prefix:', sys.base_prefix\\); print\\('in_venv:', sys.prefix != sys.base_prefix\\)\")",
+      "Bash(/storage/kfir/kfir_env/bin/python --version)",
+      "Bash(/storage/kfir/kfir_env/bin/python -c \"import sys; print\\('executable:', sys.executable\\); print\\('in_venv:', sys.prefix != sys.base_prefix\\)\")",
+      "Bash(/storage/kfir/kfir_env/bin/python -c \"import requests, tqdm; print\\('requests', requests.__version__\\); print\\('tqdm', tqdm.__version__\\)\")",
+      "Bash(/storage/kfir/kfir_env/bin/python download_grid_corpus.py --only jasagrid.pdf)",
+      "Read(//tmp/**)",
+      "Bash(nohup python -u download_grid_corpus.py)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(ps -p 1090 -o pid,etime,cmd --no-headers)",
+      "Bash(xargs ls -lt)",
+      "Bash(grep -rli --include=\"*.md\" -e \"morrone\" -e \"AV-SI\" -e \"speech inpainting\" -e \"audio-visual speech inpainting\" /storage/kfir /root/.claude 2>/dev/null | grep -v kfir_env | grep -v cursor-server | grep -v node_modules | head -30)",
+      "Read(//root/.claude/**)",
+      "Bash(grep -rli --include=\"*.md\" --include=\"*.txt\" -e \"morrone\" -e \"speech inpainting\" -e \"AV-SI\" /root/.claude /root 2>/dev/null | head -20)",
+      "Read(//root/**)",
+      "Bash(find . -type f \\\\\\( -name \"*.ckpt*\" -o -name \"*.pb\" -o -name \"*.h5\" -o -name \"*.pth\" -o -name \"*.pt\" -o -name \"*.dat\" -o -name \"*.npy\" -o -name \"*.npz\" -o -name \"*.tfrecord\" -o -name \"*.index\" -o -name \"*.meta\" -o -name \"*.data-*\" -o -name \"checkpoint\" \\\\\\))",
+      "Bash(du -sh .)",
+      "Bash(find . -type d \\\\\\( -iname \"model*\" -o -iname \"ckpt*\" -o -iname \"checkpoint*\" -o -iname \"weights\" -o -iname \"pretrained*\" \\\\\\))",
+      "Bash(mkdir -p /storage/kfir/data/audio_and_video/dlib_models)",
+      "Bash(curl -L --fail --progress-bar -o shape_predictor_68_face_landmarks.dat.bz2 http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2)",
+      "Bash(bunzip2 -k shape_predictor_68_face_landmarks.dat.bz2)",
+      "Bash(/storage/kfir/kfir_env/bin/python -c ' *)",
+      "Bash(ps -p 1090 -o pid,etime,stat --no-headers)",
+      "Bash(grep -E \"^\\\\[[0-9]+/[0-9]+\\\\]|already present|ok$|error\")",
+      "Bash(unzip -l audio_25k.zip)",
+      "Bash(unzip -l alignments.zip)",
+      "Bash(unzip -l s1.zip)",
+      "Bash(/storage/kfir/kfir_env/bin/python /storage/kfir/repos/generative-audio-workspace/audio_and_video/scripts/extract_grid.py --inspect audio_25k.zip alignments.zip s1.zip s30.zip)",
+      "Bash(nohup /storage/kfir/kfir_env/bin/python -u /storage/kfir/repos/generative-audio-workspace/audio_and_video/scripts/extract_grid.py)",
+      "Bash(ps -p 3296 -o pid,etime,stat --no-headers)"
+    ],
+    "additionalDirectories": [
+      "/storage/kfir/data",
+      "/root/.claude/projects/-storage-kfir-repos-generative-audio-workspace/memory"
+    ]
+  }
+}

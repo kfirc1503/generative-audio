@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torchvision
 import pydantic
 import os
 from datetime import datetime
@@ -14,6 +15,7 @@ from dataset.audio_dataset_inpainting import AudioInpaintingConfig, AudioInpaint
 from use_pre_trained_model.model_validator.config.schema import DataLoaderConfig
 import utils
 from nppc.auxil import LoopLoader
+torch.cuda.empty_cache()
 
 
 class OptimizerConfig(pydantic.BaseModel):
@@ -57,6 +59,12 @@ class InpaintingTrainer(nn.Module):
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
 
+        # mask = torch.zeros((1, 28, 28)).to(self.device)
+        # mask[:, :20, :] = 1.
+        # # mask = 1 - mask
+        # self.mask = mask
+
+
         # Create optimizer
         self.optimizer = getattr(optim, config.optimizer_configuration.type)(
             self.model.parameters(),
@@ -65,6 +73,15 @@ class InpaintingTrainer(nn.Module):
 
         # Initialize dataset
         dataset = AudioInpaintingDataset(config.data_configuration)
+        train_set = torchvision.datasets.MNIST(root='./', download=True, train=True,
+                                               transform=torchvision.transforms.ToTensor())
+
+        # dataloader = torch.utils.data.DataLoader(
+        #     train_set,
+        #     batch_size=config.dataloader_configuration.batch_size,
+        #     shuffle=True,
+        # )
+
         print(f"Total sample pairs in dataset: {len(dataset)}")
 
         # Create dataloader with custom collate function
@@ -130,6 +147,12 @@ class InpaintingTrainer(nn.Module):
 
             # Training step
             loss, log_dict = self.base_step((masked_spec, mask_frames, clean_spec, masked_audio))
+            # images,labels = batch
+            # images = images.to(self.device)
+            # labels = labels.to(self.device)
+            #
+            # loss, log_dict = self.base_step((images, labels))
+
             self.optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5)
@@ -159,6 +182,8 @@ class InpaintingTrainer(nn.Module):
 
         # Log everything to wandb at the end
         if self.config.use_wandb:
+            # Log plot to wandb if enabled
+
             wandb.log({
                 "train/final_loss": loss_history[-1],
                 "train/avg_loss": sum(loss_history) / len(loss_history),
@@ -184,11 +209,16 @@ class InpaintingTrainer(nn.Module):
             clean_spec, masked_spec, mask_frames
         )
 
-        output = self.model(masked_spec_mag_log, mask)
+        # output = self.model(masked_spec_mag_log, mask)
 
-        opposite_mask = 1 - mask
-        masked_loss = ((torch.abs(output - clean_spec_mag_norm_log)) ** 2) * opposite_mask
-        loss = masked_loss.sum() / (opposite_mask.sum() + 1e-6)
+        # opposite_mask = 1 - mask
+        # masked_loss = ((torch.abs(output - clean_spec_mag_norm_log)) ** 2) * opposite_mask
+        # loss = masked_loss.sum() / (opposite_mask.sum() + 1e-6)
+        #
+        output = self.model(masked_spec_mag_log, 1-mask)
+
+        masked_loss = ((torch.abs(output - clean_spec_mag_norm_log)) ** 2) * (1-mask)
+        loss = masked_loss.sum() / ((1-mask).sum() + 1e-6)
 
         # Store only the tensors we need in logs
         log = {
@@ -198,6 +228,27 @@ class InpaintingTrainer(nn.Module):
             'masked_audio': masked_audio.detach()
         }
         return loss, log
+
+    # def base_step(self, batch):
+    #     x_org = batch[0]
+    #     x_distorted = x_org * (1 - self.mask)
+    #     broadcasted_mask =  self.mask.view(1, 1, 28, 28).expand(x_org.shape[0], 1, 28, 28)
+    #
+    #     # x_restored = self.model(x_distorted, 1 - broadcasted_mask)
+    #     x_restored = self.model(x_distorted, self.mask)
+    #
+    #     err = x_org - x_restored
+    #     objective = err.pow(2).flatten(1).mean()
+    #
+    #     # Store only the tensors we need in logs
+    #     log = {
+    #         'clean_spec': x_org.detach(),
+    #         'output': x_restored.detach(),
+    #         'loss': objective.detach(),
+    #         'masked_audio': x_distorted.detach()
+    #     }
+    #     return objective, log
+
 
     def validate(self, val_dataloader):
         """Validation loop"""

@@ -50,7 +50,17 @@ def gram_schmidt_to_spec_mag(x):
         w = x[:, i, :]
         for w2 in proj_vec_list:
             w = w - w2 * torch.sum(w * w2, dim=-1, keepdim=True)
-        w_hat = w.detach() / w.detach().norm(dim=-1, keepdim=True)
+        
+        # Check for near-zero vectors before normalization
+        w_norm = w.detach().norm(dim=-1, keepdim=True)
+        w_norm_safe = torch.clamp(w_norm, min=1e-8)  # Clamp to prevent tiny norms
+        
+        # Add epsilon to prevent division by zero
+        w_hat = w.detach() / (w_norm_safe + 1e-8)
+        
+        # Check for explosions (lowered threshold and added flush)
+        if w_hat.abs().max() > 1e3 or torch.isnan(w_hat).any() or torch.isinf(w_hat).any():
+            print(f"\n⚠️  Gram-Schmidt WARNING: w_hat direction {i} has max value {w_hat.abs().max():.2e}, w_norm_min={w_norm.min():.2e}, w_norm_max={w_norm.max():.2e}\n", flush=True)
 
         x_orth.append(w)
         proj_vec_list.append(w_hat)
@@ -79,7 +89,9 @@ class AudioInpaintingPCWrapper(nn.Module):
         if alternatives_pred.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
             mask_broadcasted = mask_broadcasted.expand(-1, alternatives_pred.shape[1], -1,-1)  # Broadcast along the channel dimension
         # Apply inpainting
-        alternatives_pred = alternatives_pred * (1 - mask_broadcasted)
+        alternatives_pred = alternatives_pred * (1 - mask_broadcasted) # this is nessecry only if the restoration model is multiply by mask, since the inpaiting area in our deficintion is 0 !
+        # alternatives_pred = alternatives_pred * mask_broadcasted
+
         tmp = alternatives_pred.detach().cpu().numpy()
         # Apply Gram-Schmidt orthogonalization
         w_mat = gram_schmidt_to_spec_mag(alternatives_pred)

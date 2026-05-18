@@ -128,6 +128,23 @@ class UNetConfig(pydantic.BaseModel):
     dropout: float = 0.0
 
 
+class LatentEncoderConfig(UNetConfig):
+    n_dirs: int
+
+
+class LatentEncoderMultiLevelConfig(UNetConfig):
+    """Config for multi-level latent encoder that outputs W for all skip levels"""
+    n_dirs: int
+    # Which levels to output W for (True = output W, False = skip)
+    # Order: [skip1, skip2, skip3, skip4, bottleneck]
+    # Default: all levels
+    output_skip1: bool = True   # 64 channels
+    output_skip2: bool = True   # 128 channels  
+    output_skip3: bool = True   # 256 channels
+    output_skip4: bool = True   # 512 channels
+    output_bottleneck: bool = True  # 512 channels
+
+
 ##############################################################################
 # Encoder Block
 ##############################################################################
@@ -244,70 +261,367 @@ class UNet2(nn.Module):
         return out
 
 
-class UNet(nn.Module):
-    def __init__(self, config: UNetConfig):
-        super(UNet, self).__init__()
-        self.config = config
-        self.inc = inconv(self.config.in_channels, 64)
+# class UNet(nn.Module):
+#     def __init__(self, config: UNetConfig):
+#         super(UNet, self).__init__()
+#         self.config = config
+#         self.inc = inconv(self.config.in_channels, 64)
+#         self.down1 = down(64, 128)
+#         self.down2 = down(128, 256)
+#         self.down3 = down(256, 512 , dropout=self.config.dropout)
+#         self.down4 = down(512, 512 , dropout=self.config.dropout)
+#         self.up1 = up(1024, 256, dropout=self.config.dropout)
+#         self.up2 = up(512, 128, dropout=self.config.dropout)
+#         self.up3 = up(256, 64)
+#         self.up4 = up(128, 64)
+#         self.outc = outconv(64, self.config.out_channels)
+#
+#
+#         # x = 4
+#         # self.inc = inconv(self.config.in_channels, x)
+#         # self.down1 = down(x, 2*x)
+#         # self.down2 = down(2*x, 4*x)
+#         # self.down3 = down(4*x, 8*x , dropout=0)
+#         # self.down4 = down(8*x, 8*x , dropout=0)
+#         # self.up1 = up(16*x, 4*x, dropout=0)
+#         # self.up2 = up(8*x, 2*x, dropout=0)
+#         # self.up3 = up(4*x, x)
+#         # self.up4 = up(2*x, x)
+#         # self.outc = outconv(x, self.config.out_channels)
+#
+#
+#
+#
+#
+#     def forward(self, x):
+#         x1 = self.inc(x)
+#         x2 = self.down1(x1)
+#         x3 = self.down2(x2)
+#         x4 = self.down3(x3)
+#         x5 = self.down4(x4)
+#         x = self.up1(x5, x4)
+#         x = self.up2(x, x3)
+#         x = self.up3(x, x2)
+#         x = self.up4(x, x1)
+#         x = self.outc(x)
+#         return x
+
+
+class Encoder(nn.Module):
+    def __init__(self, in_channels=1, dropout=0):
+        super(Encoder, self).__init__()
+        self.inc = inconv(in_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
-        self.down3 = down(256, 512 , dropout=self.config.dropout)
-        self.down4 = down(512, 512 , dropout=self.config.dropout)
-        self.up1 = up(1024, 256, dropout=self.config.dropout)
-        self.up2 = up(512, 128, dropout=self.config.dropout)
-        self.up3 = up(256, 64)
-        self.up4 = up(128, 64)
-        self.outc = outconv(64, self.config.out_channels)
-
-
-        # x = 4
-        # self.inc = inconv(self.config.in_channels, x)
-        # self.down1 = down(x, 2*x)
-        # self.down2 = down(2*x, 4*x)
-        # self.down3 = down(4*x, 8*x , dropout=0)
-        # self.down4 = down(8*x, 8*x , dropout=0)
-        # self.up1 = up(16*x, 4*x, dropout=0)
-        # self.up2 = up(8*x, 2*x, dropout=0)
-        # self.up3 = up(4*x, x)
-        # self.up4 = up(2*x, x)
-        # self.outc = outconv(x, self.config.out_channels)
-
-
-
-
+        self.down3 = down(256, 512, dropout=dropout)
+        self.down4 = down(512, 512, dropout=dropout)
 
     def forward(self, x):
+        # Store intermediate outputs for skip connections
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
-        x = self.up1(x5, x4)
-        x = self.up2(x, x3)
-        x = self.up3(x, x2)
-        x = self.up4(x, x1)
+
+        return x5, [x4, x3, x2, x1]
+
+
+class Decoder(nn.Module):
+    def __init__(self, out_channels=1, dropout=0):
+        super(Decoder, self).__init__()
+        self.up1 = up(1024, 256, dropout=dropout)  # 512 + 512 = 1024
+        self.up2 = up(512, 128, dropout=dropout)  # 256 + 256 = 512
+        self.up3 = up(256, 64)  # 128 + 128 = 256
+        self.up4 = up(128, 64)  # 64 + 64 = 128
+        self.outc = outconv(64, out_channels)
+
+    def forward(self, x, skip_connections):
+        x = self.up1(x, skip_connections[0])
+        x = self.up2(x, skip_connections[1])
+        x = self.up3(x, skip_connections[2])
+        x = self.up4(x, skip_connections[3])
         x = self.outc(x)
         return x
 
 
-class RestorationWrapper(nn.Module):
-    def __init__(self, base_net: UNet):
-        super().__init__()
-        self.net = base_net
+class UNet(nn.Module):
+    def __init__(self, config: UNetConfig):
+        super(UNet, self).__init__()
+        self.config = config
+        self.encoder = Encoder(self.config.in_channels, dropout=self.config.dropout)
+        self.decoder = Decoder(self.config.out_channels, dropout=self.config.dropout)
 
-    def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
-        # input dims of the mask are [B,1,F,T]
-        # the dims of x change according to the in_channels config
-        x = self.net(x_in)
-        # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
-        mask_broadcasted = mask
-        if x.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
-            mask_broadcasted = mask_broadcasted.expand(-1, x.shape[1], -1,-1)  # Broadcast along the channel dimension
-        # Apply inpainting
-        if x_in.shape[1] > 1:
-            masked_spec = x_in[:,0,:,:]
-            masked_spec = masked_spec.unsqueeze(1).expand(-1,mask_broadcasted.shape[1],-1,-1)
-            x = masked_spec * mask_broadcasted + x * (1 - mask_broadcasted)
-        else:
-            x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
+    def forward(self, x):
+        # Get encoder output and skip connections
+        encoded, skip_connections = self.encoder(x)
+        # Pass to decoder
+        decoded = self.decoder(encoded, skip_connections)
+        return decoded
+
+
+# class RestorationWrapper(nn.Module):
+#     def __init__(self, base_net: UNet):
+#         super().__init__()
+#         self.net = base_net
+#
+#     def forward(self, x_in: torch.Tensor, mask: torch.Tensor):
+#         # input dims of the mask are [B,1,F,T]
+#         # the dims of x change according to the in_channels config
+#         x = self.net(x_in)
+#         # Ensure mask is broadcastable to match x_in's shape [B, K, F, T]
+#         mask_broadcasted = mask
+#         if x.shape[1] > 1:  # If x_in has more than 1 channel (K > 1)
+#             mask_broadcasted = mask_broadcasted.expand(-1, x.shape[1], -1, -1)  # Broadcast along the channel dimension
+#         # Apply inpainting
+#         if x_in.shape[1] > 1:
+#             masked_spec = x_in[:, 0, :, :]
+#             masked_spec = masked_spec.unsqueeze(1).expand(-1, mask_broadcasted.shape[1], -1, -1)
+#             x = masked_spec * mask_broadcasted + x * (1 - mask_broadcasted)
+#         else:
+#             x = x_in * mask_broadcasted + x * (1 - mask_broadcasted)
+#         return x
+
+
+class RestorationWrapper(nn.Module):
+    def __init__(self, net):
+        super().__init__()
+
+        self.net = net
+        # self.mask = mask
+
+    def forward(self, x, mask):
+        x_in = x
+
+        # x = (x - 0.5) / 0.2
+        x = self.net(x)
+        # x = (x * 0.2) + 0.5
+
+        x = x_in + x * mask
         return x
+
+
+
+
+
+
+
+class LatentEncoder(nn.Module):
+    def __init__(self, config:LatentEncoderConfig):
+        super(LatentEncoder, self).__init__()
+
+        self.n_dirs = config.n_dirs
+        n_dirs = config.n_dirs
+        dropout = config.dropout
+        in_channels = config.in_channels
+
+
+        # Keep exact same architecture as original UNet
+        self.inc = inconv(in_channels, 64)
+        self.down1 = down(64, 128)
+        self.down2 = down(128, 256)
+        self.down3 = down(256, 512, dropout=dropout)
+        # Modified last down layer to have n_dirs * 512 channels
+        self.down4 = down(512, 512 * n_dirs, dropout=dropout)
+
+    def forward(self, x,mask):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        mask2 = F.max_pool2d(mask, kernel_size=2)
+        x3 = self.down2(x2)
+        mask3 = F.max_pool2d(mask2, kernel_size=2)
+        x4 = self.down3(x3)
+        mask4 = F.max_pool2d(mask3, kernel_size=2)
+        x5 = self.down4(x4)
+        mask5 = F.max_pool2d(mask4, kernel_size=2)  # Final mask in latent space
+        # Reshape to separate n_dirs dimension using C // n_dirs
+        B, C, H, W = x5.shape
+        x5 = x5.view(B, self.n_dirs, C // self.n_dirs, H, W)  # Shape: [B, n_dirs, C//n_dirs, H, W]
+
+        return x5, mask5
+        # return x5
+
+# Example usage:
+# encoder = LatentEncoder(in_channels=1, n_dirs=5)
+# x = torch.randn(128, 1, 128, 256)
+# latent = encoder(x)
+# print(latent.shape)  # Should be [128, 5, 512, 8, 16]
+
+
+class LatentEncoderMultiLevel(nn.Module):
+    """
+    Multi-level latent encoder that outputs W directions for:
+    - Bottleneck (512 channels)
+    - Skip connection 4 (512 channels)
+    - Skip connection 3 (256 channels)
+    - Skip connection 2 (128 channels)
+    - Skip connection 1 (64 channels)
+    
+    This allows modifying skip connections during inference,
+    which the decoder actually uses (unlike bottleneck-only approach).
+    """
+    
+    def __init__(self, config: LatentEncoderMultiLevelConfig):
+        super(LatentEncoderMultiLevel, self).__init__()
+        
+        self.n_dirs = config.n_dirs
+        self.config = config
+        n_dirs = config.n_dirs
+        dropout = config.dropout
+        in_channels = config.in_channels
+        
+        # Shared encoder backbone (same as original LatentEncoder)
+        self.inc = inconv(in_channels, 64)
+        self.down1 = down(64, 128)
+        self.down2 = down(128, 256)
+        self.down3 = down(256, 512, dropout=dropout)
+        self.down4 = down(512, 512, dropout=dropout)
+        
+        # Output heads for each level
+        # Each head takes the features at that level and outputs n_dirs directions
+        
+        # Bottleneck head: 512 -> 512 * n_dirs
+        if config.output_bottleneck:
+            self.head_bottleneck = nn.Sequential(
+                nn.Conv2d(512, 512, kernel_size=3, padding=1),
+                nn.BatchNorm2d(512),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(512, 512 * n_dirs, kernel_size=1)
+            )
+        
+        # Skip4 head: 512 -> 512 * n_dirs (same resolution as x4)
+        if config.output_skip4:
+            self.head_skip4 = nn.Sequential(
+                nn.Conv2d(512, 512, kernel_size=3, padding=1),
+                nn.BatchNorm2d(512),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(512, 512 * n_dirs, kernel_size=1)
+            )
+        
+        # Skip3 head: 256 -> 256 * n_dirs
+        if config.output_skip3:
+            self.head_skip3 = nn.Sequential(
+                nn.Conv2d(256, 256, kernel_size=3, padding=1),
+                nn.BatchNorm2d(256),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(256, 256 * n_dirs, kernel_size=1)
+            )
+        
+        # Skip2 head: 128 -> 128 * n_dirs
+        if config.output_skip2:
+            self.head_skip2 = nn.Sequential(
+                nn.Conv2d(128, 128, kernel_size=3, padding=1),
+                nn.BatchNorm2d(128),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(128, 128 * n_dirs, kernel_size=1)
+            )
+        
+        # Skip1 head: 64 -> 64 * n_dirs
+        if config.output_skip1:
+            self.head_skip1 = nn.Sequential(
+                nn.Conv2d(64, 64, kernel_size=3, padding=1),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 64 * n_dirs, kernel_size=1)
+            )
+    
+    def forward(self, x, mask):
+        """
+        Forward pass.
+        
+        Args:
+            x: Input tensor [B, in_channels, F, T]
+            mask: Mask tensor [B, 1, F, T] (1 = known, 0 = missing)
+            
+        Returns:
+            w_bottleneck: [B, n_dirs, 512, H_b, W_b] or None
+            w_skips: List of [w_skip4, w_skip3, w_skip2, w_skip1] or None for each
+            masks: Dict of masks at each level
+        """
+        n_dirs = self.n_dirs
+        
+        # Encode through backbone
+        # Note: inc (inconv) does NOT downsample, down1-4 DO downsample
+        # Mask pooling must match the encoder's downsampling pattern
+        x1 = self.inc(x)      # [B, 64, F, T] - same spatial size as input
+        # mask1 should match x1's spatial size (no pooling yet)
+        
+        x2 = self.down1(x1)   # [B, 128, F/2, T/2]
+        mask2 = F.max_pool2d(mask, kernel_size=2)  # Pool from original mask
+        
+        x3 = self.down2(x2)   # [B, 256, F/4, T/4]
+        mask3 = F.max_pool2d(mask2, kernel_size=2)
+        
+        x4 = self.down3(x3)   # [B, 512, F/8, T/8]
+        mask4 = F.max_pool2d(mask3, kernel_size=2)
+        
+        x5 = self.down4(x4)   # [B, 512, F/16, T/16] - bottleneck
+        mask5 = F.max_pool2d(mask4, kernel_size=2)
+        
+        # Generate W directions at each level
+        B = x.shape[0]
+        
+        # Bottleneck W
+        w_bottleneck = None
+        if self.config.output_bottleneck:
+            w_b = self.head_bottleneck(x5)  # [B, 512*n_dirs, H, W]
+            _, C_total, H, W = w_b.shape
+            C = C_total // n_dirs
+            w_bottleneck = w_b.view(B, n_dirs, C, H, W)
+        
+        # Skip4 W (uses x4 features)
+        w_skip4 = None
+        if self.config.output_skip4:
+            w_s4 = self.head_skip4(x4)
+            _, C_total, H, W = w_s4.shape
+            C = C_total // n_dirs
+            w_skip4 = w_s4.view(B, n_dirs, C, H, W)
+        
+        # Skip3 W (uses x3 features)
+        w_skip3 = None
+        if self.config.output_skip3:
+            w_s3 = self.head_skip3(x3)
+            _, C_total, H, W = w_s3.shape
+            C = C_total // n_dirs
+            w_skip3 = w_s3.view(B, n_dirs, C, H, W)
+        
+        # Skip2 W (uses x2 features)
+        w_skip2 = None
+        if self.config.output_skip2:
+            w_s2 = self.head_skip2(x2)
+            _, C_total, H, W = w_s2.shape
+            C = C_total // n_dirs
+            w_skip2 = w_s2.view(B, n_dirs, C, H, W)
+        
+        # Skip1 W (uses x1 features)
+        w_skip1 = None
+        if self.config.output_skip1:
+            w_s1 = self.head_skip1(x1)
+            _, C_total, H, W = w_s1.shape
+            C = C_total // n_dirs
+            w_skip1 = w_s1.view(B, n_dirs, C, H, W)
+        
+        # Pack outputs
+        w_skips = [w_skip4, w_skip3, w_skip2, w_skip1]  # Order matches decoder's skip_connections
+        masks = {
+            'bottleneck': mask5,
+            'skip4': mask4,
+            'skip3': mask3,
+            'skip2': mask2,
+            'skip1': mask  # x1 has same spatial size as input, so use original mask
+        }
+        
+        return w_bottleneck, w_skips, masks
+
+
+# Example usage for LatentEncoderMultiLevel:
+# config = LatentEncoderMultiLevelConfig(in_channels=2, n_dirs=5)
+# encoder = LatentEncoderMultiLevel(config)
+# x = torch.randn(4, 2, 128, 256)
+# mask = torch.ones(4, 1, 128, 256)
+# w_bottleneck, w_skips, masks = encoder(x, mask)
+# print(f"w_bottleneck: {w_bottleneck.shape}")  # [4, 5, 512, 8, 16]
+# print(f"w_skip4: {w_skips[0].shape}")  # [4, 5, 512, 16, 32]
+# print(f"w_skip3: {w_skips[1].shape}")  # [4, 5, 256, 32, 64]
+# print(f"w_skip2: {w_skips[2].shape}")  # [4, 5, 128, 64, 128]
+# print(f"w_skip1: {w_skips[3].shape}")  # [4, 5, 64, 128, 256]

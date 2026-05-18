@@ -1,0 +1,85 @@
+# Number of samples to validate
+num_samples_to_validate: 5
+
+# Comparison validator configuration
+comparison_validator_configuration:
+  # NPPC Regular Model Configuration
+  # Note: Using the same checkpoint as latent for now - update if you have a separate regular NPPC checkpoint
+#  nppc_checkpoint_path: "/storage/kfir/data/inpainting/nppc_model/checkpoint/checkpoint_final_20250720_034737.pt"
+#  nppc_checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250131_001448.pt"
+  nppc_checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20251220_194218.pt"
+
+  nppc_model_configuration:
+    pretrained_restoration_model_configuration:
+      in_channels: 1
+      out_channels: 1
+      dropout: 0.0
+    
+    wandb_config:
+      entity: "kfirc-tel-aviv-university"
+      project: "generative-audio"
+      # OLD GRAY MODEL:
+#      artifact_name: "restoration_model"
+#      artifact_version: "v9"
+#      checkpoint_filename: "checkpoint_final_20250608_000730.pt"
+      # NEW GREEN MODEL:
+      artifact_name: "latent_aware_restoration_model"
+      artifact_version: "latest"
+      checkpoint_filename: "latent_aware_checkpoint_final_20260119_005839.pt"
+    
+    audio_pc_wrapper_configuration:
+      n_dirs: 5
+      model_configuration:
+        in_channels: 2
+        out_channels: 5
+    device: "cuda"
+  
+  # NPPC Latent Model Configuration
+#  nppc_latent_checkpoint_path: "/storage/kfir/data/inpainting/nppc_model/checkpoint/checkpoint_final_20251203_232017.pt"
+#  nppc_latent_checkpoint_path: "/storage/kfir/data/inpainting/nppc_model_latent/checkpoint/checkpoint_final_20260118_023652.pt"
+  nppc_latent_checkpoint_path: "/storage/kfir/data/inpainting/nppc_model_latent/checkpoint/checkpoint_final_20260125_033714.pt"
+
+
+  nppc_latent_model_configuration:
+    in_channels: 2
+    dropout: 0
+    n_dirs: 5
+  
+  # NPPC Multi-Level Latent Model Configuration (NEW)
+  nppc_multi_level_checkpoint_path: "/storage/kfir/data/inpainting/nppc_model_multi_level/checkpoint/checkpoint_final_20260210_044734.pt"
+  nppc_multi_level_model_configuration:
+    in_channels: 2
+    dropout: 0
+    n_dirs: 5
+    output_bottleneck: true
+    output_skip4: true
+    output_skip3: true
+    output_skip2: true
+    output_skip1: true
+  
+  # Shared settings
+  device: "cuda"
+  save_dir: "validation_comparison_results"
+  max_dirs_to_plot: 5  # Set to null to plot all directions
+
+# Data configuration (shared for both models)
+data_configuration:
+  clean_path: "/storage/data/LibriSpeech/train-clean-360"
+  sample_rate: 16000
+  missing_length_seconds: 0.128
+  missing_start_seconds: 0.4
+  sub_sample_length_seconds: 2.044
+  target_dB_FS: -25.0
+  stft_configuration:
+    nfft: 255
+    win_length: 255
+    hop_length: 128
+  use_vad: True
+
+# Dataloader configuration
+dataloader_configuration:
+  num_workers: 1
+  pin_memory: true
+  shuffle: false
+  batch_size: 1
+

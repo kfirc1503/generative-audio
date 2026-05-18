@@ -1,0 +1,52 @@
+# Number of samples to validate
+#num_samples_to_validate: 50
+
+# ../../../../../../data/inpainting/nppc_model_mnist/checkpoint/checkpoint_final_20250517_150709.pt
+
+# Model validator configuration
+model_validator_configuration:
+  #this is maybe working
+#  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250425_135730.pt"
+  checkpoint_path: "../../../../../../data/inpainting/nppc_model_mnist/checkpoint/checkpoint_final_20250524_154531.pt"
+#  checkpoint_path: "../../../../../../data/inpainting/nppc_model_mnist/checkpoint/checkpoint_final_20250524_135600.pt"
+
+
+  regular_checkpoint_path: "../../../../../../data/inpainting/nppc_model_mnist/checkpoint/checkpoint_final_20250517_150709.pt"
+#  checkpoint_path: "../../../../../../data/inpainting/nppc_model/checkpoint/checkpoint_final_20250218_230241.pt"
+
+
+  device: "cuda"
+  save_dir: "validation_nppc_results"
+  max_dirs_to_plot: 5  # Set to null to plot all directions
+  nppc_model_configuration:
+    pretrained_restoration_model_configuration:
+      in_channels: 1
+      out_channels: 1
+      dropout: 0
+
+#    # Wandb configuration for loading the pretrained model
+    wandb_config:
+      entity: "kfirc-tel-aviv-university"
+      project: "generative-audio"
+      artifact_name: "restoration_model"
+#      artifact_version: "v3"
+      artifact_version: "latest"
+
+      checkpoint_filename: "checkpoint_final_20250422_135406.pt"
+
+#      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
+#      checkpoint_filename: "checkpoint_final_20250130_221935.pt"
+
+
+    #    pretrained_restoration_model_path: "../../../../../../data/inpainting/restoration_model/checkpoint/checkpoint_final_20250130_221935.pt"
+    audio_pc_wrapper_configuration:
+      n_dirs: 5
+      model_configuration:
+        in_channels: 2
+        out_channels: 5
+
+  nppc_latent_model_configuration:
+    in_channels: 2
+    dropout: 0
+    n_dirs: 5
+

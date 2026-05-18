@@ -1,5 +1,5 @@
 # Training parameters
-n_epochs: 16  # Set to null if using n_steps
+n_epochs: 10  # Set to null if using n_steps
 #n_steps: null  # Set to null if using n_epochs
 checkpoint_dir: "../../../../../../data/checkpoints/restoration_model"
 
@@ -9,13 +9,20 @@ inpainting_training_configuration:
   use_wandb: true
   wandb_project_name: "generative-audio"
   wandb_run_name: "restoration-inpainting-model-128ms-gap-size"  # Will be auto-generated if not specified
+#  wandb_run_name: "mnsit-inpainting-model"  # Will be auto-generated if not specified
   wandb_artifact_name: "restoration_model"
+#  wandb_tags:
+#    - "128ms_gap"            # Gap length
+#    - "use_vad"              # voice activity is used
+#    - "2.044sec_audio_len"
+#    - "libriSpeech_dataset"
+#    - "dropout_0.2"
+#    - "encoder_decoder_articure"
   wandb_tags:
-    - "128ms_gap"            # Gap length
-    - "use_vad"              # voice activity is used
-    - "2.044sec_audio_len"
-    - "libriSpeech_dataset"
-    - "dropout_0.2"
+    - "mnsit"            # Gap length
+    - "dropout_0"
+    - "encoder_decoder_articure"
+
   # Model configuration
   device: "cuda"
 
@@ -23,12 +30,14 @@ inpainting_training_configuration:
   model_configuration:
     in_channels: 1
     out_channels: 1
-    dropout: 0.2
+    dropout: 0
     # Add other UNet specific configurations here
 
   # Data configuration
   data_configuration:
-    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
+#    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
+    clean_path: "../../../../../../../data/LibriSpeech/train-clean-360"
+
     sample_rate: 16000
     missing_length_seconds: 0.128
     missing_start_seconds: 0.4
@@ -45,9 +54,9 @@ inpainting_training_configuration:
 
   # Dataloader configuration
   dataloader_configuration:
-    batch_size: 128
+    batch_size: 32
     shuffle: true
-    num_workers: 8
+    num_workers: 2
     pin_memory: true
 
   # Optimizer configuration
@@ -55,7 +64,7 @@ inpainting_training_configuration:
     type: "Adam"
     args:
       lr: 1.0e-4
-      betas: [0.5, 0.999]
+      betas: [0.9, 0.999]
 
 ## Validation configuration (optional)
 #validation_data_configuration:

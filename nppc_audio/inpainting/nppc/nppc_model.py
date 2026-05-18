@@ -155,5 +155,6 @@ class NPPCModel(nn.Module):
             pred_spec_mag_norm_log: Predicted normalized log magnitude spectrogram [B,1,F,T]
         """
         with torch.no_grad():
+            mask = 1 - mask # the restoration model execepting 1 in the inpatining area !
             pred_spec_mag_log = self.pretrained_restoration_model(masked_spec_mag_log, mask)
         return pred_spec_mag_log

@@ -1,0 +1,89 @@
+# Training parameters
+n_epochs: 5  # Set to null if using n_steps
+#n_steps: null  # Set to null if using n_epochs
+checkpoint_dir: "../../../../../../data/checkpoints/latent_aware_restoration_model"
+
+# Main training configuration
+latent_aware_training_configuration:
+  # Wandb configuration for logging
+  use_wandb: true
+  wandb_project_name: "generative-audio"
+  wandb_run_name: "latent-aware-restoration-model"
+  wandb_artifact_name: "latent_aware_restoration_model"
+  wandb_tags:
+    - "latent_aware"
+    - "dual_encoder"
+    - "128ms_gap"
+
+  # Device
+  device: "cuda"
+  
+  # Pretrained restoration model (GRAY model - frozen)
+  # Option 1: Load from wandb (same as NPPC trainer)
+  pretrained_wandb_config:
+    entity: "kfirc-tel-aviv-university"
+    project: "generative-audio"
+    artifact_name: "restoration_model"
+    artifact_version: "v9"
+    checkpoint_filename: "checkpoint_final_20250608_000730.pt"
+  
+  # Option 2: Load from local path (uncomment below and comment wandb_config above)
+  # pretrained_restoration_model_path: "../../../../../../data/checkpoints/restoration_model/checkpoint_final.pt"
+  
+  # Lambda for latent regularization term: L = ||x̂ - x||² + λ||M'(h - h_m)||
+  latent_reg_lambda: 1.0
+  
+  # Validation settings - run validation every N steps to check for overfitting
+  enable_periodic_validation: true  # Set to false to disable periodic validation
+  validation_interval: 500  # Run validation every 500 steps
+
+  # Model configuration (GREEN model - trainable, same architecture as pretrained)
+  model_configuration:
+    in_channels: 1
+    out_channels: 1
+    dropout: 0
+
+  # Data configuration
+  data_configuration:
+    clean_path: "../../../../../../../data/LibriSpeech/train-clean-360"
+    sample_rate: 16000
+    missing_length_seconds: 0.128
+    missing_start_seconds: 0.4
+    sub_sample_length_seconds: 2.044
+    target_dB_FS: -25.0
+    target_dB_FS_floating_value: 0
+    use_vad: true
+    stft_configuration:
+      nfft: 255
+      win_length: 255
+      hop_length: 128
+
+  # Dataloader configuration
+  dataloader_configuration:
+    batch_size: 32
+    shuffle: true
+    num_workers: 2
+    pin_memory: true
+
+  # Optimizer configuration
+  optimizer_configuration:
+    type: "Adam"
+    args:
+      lr: 1.0e-4
+      betas: [0.9, 0.999]
+
+## Validation configuration (optional)
+#validation_data_configuration:
+#  clean_path: "../../../../../../data/clean/test"
+#  sample_rate: 16000
+#  missing_length_seconds: 0.128
+#  missing_start_seconds: 0.4
+#  sub_sample_length_seconds: 2.044
+#  target_dB_FS: -25.0
+#  target_dB_FS_floating_value: 0
+#  use_vad: true
+#  stft_configuration:
+#    nfft: 255
+#    win_length: 255
+#    hop_length: 128
+

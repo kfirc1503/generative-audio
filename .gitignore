@@ -1434,3 +1434,14 @@ nppc_audio/scripts/train/outputs
 nppc_audio/inpainting/scripts/validator/validation_nppc_results
 nppc_audio/inpainting/scripts/validator/validation_results
 #./FullSubNet_plus/.idea
+# --- experiment output / data, not source (added 2026-05-18) ---
+outputs/
+wandb/
+multirun/
+validation_comparison_results/
+MNIST/
+*.wav
+*.wandb
+
+# third-party repo cloned inside this project (not our code)
+audio_and_video/audio-visual-speech-inpainting/

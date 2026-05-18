@@ -7,6 +7,7 @@ from nppc_audio.inpainting.trainer.restoration_trainer import InpaintingTrainer
 from nppc_audio.inpainting.trainer.nppc_trainer import NPPCAudioInpaintingTrainer
 from nppc_audio.inpainting.scripts.train.config.schema_nppc import Config
 from dataset.audio_dataset_inpainting import AudioInpaintingDataset,AudioInpaintingConfig
+import utils
 
 @hydra.main(version_base=None, config_path="config", config_name="config_nppc")
 def main(cfg: DictConfig):
@@ -30,7 +31,8 @@ def main(cfg: DictConfig):
             batch_size=config.inpainting_nppc_training_configuration.dataloader_configuration.batch_size,  # Adjust based on your GPU memory
             shuffle=config.inpainting_nppc_training_configuration.dataloader_configuration.shuffle,
             num_workers=config.inpainting_nppc_training_configuration.dataloader_configuration.num_workers,
-            pin_memory=config.inpainting_nppc_training_configuration.dataloader_configuration.pin_memory
+            pin_memory=config.inpainting_nppc_training_configuration.dataloader_configuration.pin_memory,
+            collate_fn=utils.collate_fn
         )
 
     trainer.train(n_steps= config.n_steps, n_epochs= config.n_epochs,checkpoint_dir = config.checkpoint_dir,save_flag=True ,val_dataloader=val_dataloader)

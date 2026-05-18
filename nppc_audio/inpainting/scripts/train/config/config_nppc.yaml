@@ -1,30 +1,80 @@
-n_epochs: 6
-checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
+n_epochs: 5
+#checkpoint_dir: "../../../../../../data/inpainting/nppc_model/checkpoint"
+#checkpoint_dir: "../../../../../../data/inpainting/nppc_model_mnist/checkpoint"
+#checkpoint_dir: "/storage/kfir/data/inpainting/nppc_model/checkpoint"
+#checkpoint_dir: "/storage/kfir/data/inpainting/nppc_model_latent/checkpoint"
+checkpoint_dir: "/storage/kfir/data/inpainting/nppc_model_multi_level/checkpoint"
+
 inpainting_nppc_training_configuration:
   device: "cuda"
+  # Training mode options:
+  # - "regular": Classic NPPC in spectrogram space
+  # - "latent": Latent NPPC (bottleneck only)
+  # - "latent_multi_level": Multi-level latent NPPC with GLOBAL Gram-Schmidt
+  # - "latent_multi_level_v2": Multi-level latent NPPC with PER-LAYER Gram-Schmidt
+  training_mode: "latent_multi_level_v2"  # v2 = per-layer GS, v1 = global GS
   second_moment_loss_lambda: 1
   use_wandb: true
   wandb_project_name: "generative-audio"
-  wandb_run_name: "nppc-inpainting-model-128ms-gap-size"  # Will be auto-generated if not specified
+  #wandb_run_name: "nppc-inpainting-model-128ms-gap-size"  # Will be auto-generated if not specified
+  #wandb_run_name: "nppc-multi-level-latent"
+  wandb_run_name: "nppc-multi-level-latent-v2"
   wandb_tags:
     - "128ms_gap"            # Gap length
     - "use_vad"              # voice activity is used
     - "2.044sec_audio_len"
     - "libri_speech"
-  wandb_artifact_name: "nppc_inpainting_model"  # Single artifact for all checkpoints
+    #- "classic_nppc"
+    #- "nppc_latent_space"
+    #- "nppc_multi_level_latent"
+    - "nppc_multi_level_latent_v2"
+  #wandb_artifact_name: "nppc_inpainting_model"  # Single artifact for all checkpoints
+  #wandb_artifact_name: "nppc_inpainting_model_mnist"  # Single artifact for all checkpoints
+  #wandb_artifact_name: "nppc_latent_with_decoder_inpainting_model"  # Single artifact for all checkpoints
+  #wandb_artifact_name: "nppc_latent_inpainting_model_new_restoration_model"  # Single artifact for all checkpoints
+  #wandb_artifact_name: "nppc_multi_level_latent_model"
+  wandb_artifact_name: "nppc_multi_level_latent_model_v2"
+
+  # Multi-level latent NPPC configuration (NEW)
+  nppc_latent_multi_level_configuration:
+    in_channels: 2
+    dropout: 0
+    n_dirs: 5
+    output_bottleneck: true
+    output_skip4: true
+    output_skip3: true
+    output_skip2: true
+    output_skip1: true
+
+  nppc_latent_model_configuration:
+    in_channels: 2
+    dropout: 0
+    n_dirs: 5
+
   nppc_model_configuration:
     pretrained_restoration_model_configuration:
       in_channels: 1
       out_channels: 1
-      dropout: 0.2
+      dropout: 0.0
 
     # Wandb configuration for loading the pretrained model
+    # NOW USING GREEN MODEL (latent-aware restoration model)
     wandb_config:
       entity: "kfirc-tel-aviv-university"
       project: "generative-audio"
-      artifact_name: "restoration_model"
-      artifact_version: "latest"
-      checkpoint_filename: "checkpoint_final_20250215_163916.pt"
+      artifact_name: "latent_aware_restoration_model"
+      artifact_version: "latest"  # Or specify "v0" if you want a specific version
+      checkpoint_filename: "latent_aware_checkpoint_final_20260119_005839.pt"
+    
+    # OLD GRAY MODEL CONFIG (commented out for reference)
+    # wandb_config:
+    #   entity: "kfirc-tel-aviv-university"
+    #   project: "generative-audio"
+    #   artifact_name: "restoration_model"
+    #   artifact_version: "v9"
+    #   checkpoint_filename: "checkpoint_final_20250608_000730.pt"
+
+
 
     audio_pc_wrapper_configuration:
       n_dirs: 5
@@ -34,7 +84,10 @@ inpainting_nppc_training_configuration:
     device: "cuda"
 
   data_configuration:
-    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
+#    clean_path: "../../../../../../data/LibriSpeech/LibriSpeech/train-clean-360"
+#    clean_path: "../../../../../../../data/LibriSpeech/train-clean-360"
+    clean_path: "/storage/data/LibriSpeech/train-clean-360"
+
     sample_rate: 16000
     missing_spec_frames: 18
     missing_start_seconds: 0.4
@@ -47,32 +100,29 @@ inpainting_nppc_training_configuration:
     use_vad: True
 
   dataloader_configuration:
-    batch_size: 128
+    batch_size: 32
     shuffle: true
-    num_workers: 16
+    num_workers: 4
     pin_memory: false
 
   optimizer_configuration:
     type: "Adam"
     args:
       lr: 1.0e-4
-      betas: [0.5, 0.999]
+      betas: [0.9, 0.999]
 
 
 
 
-#validation_data_configuration:
-#  clean_path: "../../../../FullSubNet_plus/data/clean/test"
-#  sample_rate: 16000
-#  missing_length_seconds: 0.256
-#  missing_start_seconds: 0.4
-#  # Adjust the sub_sample_length_seconds to get exactly T=512:
-##    sub_sample_length_seconds: 8.176
-##    sub_sample_length_seconds: 4.088
-#  sub_sample_length_seconds: 1.022
-#  target_dB_FS: -25.0
-#  stft_configuration:
-#    nfft: 255
-#    win_length: 255
-#    hop_length: 128
-#  use_vad: True
+validation_data_configuration:
+  clean_path: "/storage/data/LibriSpeech/dev-clean"  # Use dev-clean for validation
+  sample_rate: 16000
+  missing_spec_frames: 18
+  missing_start_seconds: 0.4
+  sub_sample_length_seconds: 2.044
+  target_dB_FS: -25.0
+  stft_configuration:
+    nfft: 255
+    win_length: 255
+    hop_length: 128
+  use_vad: True
